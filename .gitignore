@@ -19,6 +19,14 @@
 
 # production
 /build
+/dist
+
+# python
+__pycache__/
+*.py[cod]
+
+# claude
+.claudeignore
 
 # misc
 .DS_Store
@@ -30,8 +38,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files — keep example, ignore everything else
 .env*
+!.env.example
 
 # vercel
 .vercel
