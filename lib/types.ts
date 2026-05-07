@@ -21,6 +21,7 @@ export interface PotteryItem {
   rarity: Rarity | null
   museums_comparable: string | null
   location_in_case: string | null
+  case_id: string | null
   condition: Condition | null
   originality: Originality | null
   seller_donator: string | null
@@ -32,4 +33,22 @@ export interface PotteryItem {
   description: string | null
   photos: string[]
   created_at: string
+}
+
+export interface Case {
+  id: string
+  name: string
+  description: string | null
+  capacity: number | null
+  last_inventoried_at: string | null
+}
+
+export interface LocationHistory {
+  id: string
+  pottery_id: string
+  from_case: string | null
+  to_case: string
+  moved_at: string
+  moved_by: string | null
+  notes: string | null
 }

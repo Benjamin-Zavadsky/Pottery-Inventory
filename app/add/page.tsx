@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 import AuthGuard from '@/components/AuthGuard'
+import { CASES, CASE_IDS } from '@/lib/constants'
 
 const CONDITIONS = ['Mint', 'Excellent', 'Good', 'Fair', 'Poor']
 const RARITIES = ['Common', 'Uncommon', 'Rare', 'Museum-Grade']
@@ -52,7 +53,7 @@ export default function AddPage() {
     name: '', use_function: '', place_of_origin: '', age: '', color: '',
     tribe_culture: '', condition: '', rarity: '', originality: '', dimensions: '',
     date_acquired: '', location_acquired: '', seller_donator: '', appraised_value: '',
-    acquisition_cost: '', location_in_case: '', museums_comparable: '', provenance: '',
+    acquisition_cost: '', case_id: '', museums_comparable: '', provenance: '',
     research_notes: '',
   })
 
@@ -174,7 +175,7 @@ export default function AddPage() {
           seller_donator: form.seller_donator || null,
           appraised_value: form.appraised_value ? parseFloat(form.appraised_value) : null,
           acquisition_cost: form.acquisition_cost ? parseFloat(form.acquisition_cost) : null,
-          location_in_case: form.location_in_case || null,
+          case_id: CASE_IDS.includes(form.case_id as typeof CASE_IDS[number]) ? form.case_id : null,
           museums_comparable: form.museums_comparable || null,
           provenance: form.provenance || null,
           research_notes: form.research_notes || description
@@ -428,8 +429,11 @@ export default function AddPage() {
                   <Field label="Dimensions">
                     <input value={form.dimensions} onChange={e => set('dimensions', e.target.value)} placeholder='e.g. 8"H × 5"W' className={inputClass} />
                   </Field>
-                  <Field label="Location in Case">
-                    <input value={form.location_in_case} onChange={e => set('location_in_case', e.target.value)} className={inputClass} />
+                  <Field label="Display Case">
+                    <select value={form.case_id} onChange={e => set('case_id', e.target.value)} className={inputClass}>
+                      <option value="">— Unassigned —</option>
+                      {CASES.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
                   </Field>
                 </div>
                 <div className="grid grid-cols-3 gap-4">

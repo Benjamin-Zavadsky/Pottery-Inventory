@@ -26,6 +26,18 @@ export default function BottomNav() {
         </Link>
 
         <Link
+          href="/cases"
+          className={`flex-1 flex flex-col items-center justify-center gap-1 h-full transition-colors ${pathname.startsWith('/cases') ? 'text-[#111]' : 'text-[#bbb]'}`}
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="2" y="4" width="20" height="16" rx="2" />
+            <line x1="2" y1="9" x2="22" y2="9" />
+            <line x1="12" y1="9" x2="12" y2="20" />
+          </svg>
+          <span className="text-[9px] uppercase tracking-widest font-medium">Cases</span>
+        </Link>
+
+        <Link
           href="/add"
           className="flex-1 flex flex-col items-center justify-center gap-1 h-full"
         >

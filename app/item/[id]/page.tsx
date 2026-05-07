@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
+import { CASES, CASE_IDS } from '@/lib/constants'
 import type { PotteryItem } from '@/lib/types'
 import type { User } from '@supabase/supabase-js'
 
@@ -80,8 +81,29 @@ export default function ItemPage() {
         const { data } = supabase.storage.from('pottery-photos').getPublicUrl(path)
         photoUrls.push(data.publicUrl)
       }
-      const { error } = await supabase.from('pottery').update({ ...form, photos: photoUrls }).eq('id', id)
+
+      const validCaseId = CASE_IDS.includes(form.case_id as typeof CASE_IDS[number])
+        ? form.case_id
+        : null
+
+      const { error } = await supabase
+        .from('pottery')
+        .update({ ...form, case_id: validCaseId, photos: photoUrls })
+        .eq('id', id)
       if (error) throw error
+
+      // Log movement if case changed
+      const prevCaseId = item?.case_id ?? null
+      if (validCaseId && validCaseId !== prevCaseId) {
+        const { data: { user: currentUser } } = await supabase.auth.getUser()
+        await supabase.from('location_history').insert({
+          pottery_id: id,
+          from_case: prevCaseId,
+          to_case: validCaseId,
+          moved_by: currentUser?.id ?? null,
+        })
+      }
+
       const { data } = await supabase.from('pottery').select('*').eq('id', id).single()
       setItem(data); setForm(data)
       setNewPhotos([]); setNewPreviews([]); setRemovedPhotoUrls(new Set())
@@ -416,7 +438,7 @@ function ViewInfo({ item }: { item: PotteryItem }) {
         {item.condition && <InfoField label="Condition" value={item.condition} />}
         {item.rarity && <InfoField label="Rarity" value={item.rarity} />}
         {item.originality && <InfoField label="Originality" value={item.originality} />}
-        {item.location_in_case && <InfoField label="Location in Case" value={item.location_in_case} />}
+        {item.case_id && <InfoField label="Display Case" value={CASES.find(c => c.id === item.case_id)?.name ?? item.case_id} />}
         {item.date_acquired && <InfoField label="Date Acquired" value={new Date(item.date_acquired).toLocaleDateString()} />}
         {item.location_acquired && <InfoField label="Acquired From" value={item.location_acquired} />}
         {item.seller_donator && <InfoField label="Seller / Donator" value={item.seller_donator} />}
@@ -465,7 +487,12 @@ function EditForm({ form, set }: { form: Partial<PotteryItem>; set: (f: string, 
         <EF label="Use / Function"><input value={form.use_function ?? ''} onChange={e => set('use_function', e.target.value)} className={inp} /></EF>
         <EF label="Tribe / Culture"><input value={form.tribe_culture ?? ''} onChange={e => set('tribe_culture', e.target.value)} className={inp} /></EF>
         <EF label="Dimensions"><input value={form.dimensions ?? ''} onChange={e => set('dimensions', e.target.value)} className={inp} /></EF>
-        <EF label="Location in Case"><input value={form.location_in_case ?? ''} onChange={e => set('location_in_case', e.target.value)} className={inp} /></EF>
+        <EF label="Display Case">
+          <select value={form.case_id ?? ''} onChange={e => set('case_id', e.target.value)} className={inp}>
+            <option value="">— Unassigned —</option>
+            {CASES.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </EF>
       </div>
       <div className="grid grid-cols-3 gap-3">
         <EF label="Condition">
