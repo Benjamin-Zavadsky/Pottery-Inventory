@@ -26,7 +26,7 @@ __pycache__/
 *.py[cod]
 
 # claude
-.claudeignore
+# .claudeignore is intentionally committed so all contributors benefit from it
 
 # misc
 .DS_Store
