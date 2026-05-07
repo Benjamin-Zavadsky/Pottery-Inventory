@@ -155,7 +155,7 @@ npm run build        # Production build — also runs TypeScript typecheck
 npm run lint         # Run ESLint across the project
 ```
 
-**Testing** *(once installed in Phase 4)*
+**Testing** *(once installed)*
 ```bash
 npm run test         # Run unit and component tests (Vitest)
 npm run test:e2e     # Run end-to-end tests (Playwright)
@@ -217,3 +217,13 @@ Do exactly what was asked and nothing more. Do not refactor surrounding code, re
 - `fix:` — bug fix
 - `chore:` — config, dependencies, tooling
 - `refactor:` — restructuring without behavior change
+
+**Skills**
+Before starting any task that has a matching skill file in `skills/`, read that file first. Skill files define the exact sequence for common operations in this project.
+
+| Task | Skill file |
+|------|------------|
+| Add a new database field | `skills/add-db-field.md` |
+| Add a new page | `skills/add-page.md` |
+| Update the AI prompt | `skills/ai-prompt-update.md` |
+| Anything involving case or location tracking | `skills/case-tracking.md` |
