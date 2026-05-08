@@ -174,24 +174,19 @@ export default function ItemPage() {
     setAppliedKeys(new Set())
     try {
       const existingUrls = (item?.photos ?? []).filter(url => !removedPhotoUrls.has(url))
-      console.log('[analyze] photo count:', existingUrls.length + newPhotos.length)
       const [existingImages, newImages] = await Promise.all([
         Promise.all(existingUrls.map(resizeUrl)),
         Promise.all(newPhotos.map(resizeFile)),
       ])
       const images = [...existingImages, ...newImages]
-      console.log('[analyze] images ready:', images.length)
       if (!images.length) { setAnalyzeError('No photos found to analyze'); return }
       const body = JSON.stringify({ images, userContext: userContext.trim() || undefined })
-      console.log('[analyze] payload size (bytes):', body.length)
       const apiRes = await fetch('/api/generate-description', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body,
       })
-      console.log('[analyze] API status:', apiRes.status)
       const text = await apiRes.text()
-      console.log('[analyze] API response (first 300 chars):', text.slice(0, 300))
       let data: Record<string, string>
       try {
         data = JSON.parse(text)
@@ -203,10 +198,10 @@ export default function ItemPage() {
         setAnalyzeError(data.error)
       } else if (data) {
         setSuggestions(data)
+        window.scrollTo({ top: 0, behavior: 'smooth' })
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : (err as { message?: string })?.message ?? 'Analysis failed'
-      console.error('[analyze] caught error:', err)
       setAnalyzeError(msg)
     }
     setGenerating(false)
@@ -426,9 +421,6 @@ export default function ItemPage() {
                       </>
                     )}
                   </button>
-                  {analyzeError && (
-                    <p className="text-xs text-red-500 text-center px-2">{analyzeError}</p>
-                  )}
                 </div>
               )}
 
