@@ -35,6 +35,7 @@ export default function ItemPage() {
   const [generating, setGenerating] = useState(false)
   const [suggestions, setSuggestions] = useState<Record<string, string> | null>(null)
   const [appliedKeys, setAppliedKeys] = useState<Set<string>>(new Set())
+  const [analyzeError, setAnalyzeError] = useState<string | null>(null)
   const [userContext, setUserContext] = useState('')
   const [user, setUser] = useState<User | null>(null)
 
@@ -116,10 +117,15 @@ export default function ItemPage() {
 
   async function resizeUrl(url: string): Promise<{ imageBase64: string; mediaType: string }> {
     const MAX_DIM = 1568
+    // Fetch as blob so the canvas is never cross-origin tainted
+    const res = await fetch(url)
+    if (!res.ok) throw new Error(`Failed to fetch photo (${res.status})`)
+    const blob = await res.blob()
+    const objectUrl = URL.createObjectURL(blob)
     return new Promise((resolve, reject) => {
       const img = new Image()
-      img.crossOrigin = 'anonymous'
       img.onload = () => {
+        URL.revokeObjectURL(objectUrl)
         let { width, height } = img
         if (width > MAX_DIM || height > MAX_DIM) {
           if (width >= height) { height = Math.round((height / width) * MAX_DIM); width = MAX_DIM }
@@ -132,8 +138,8 @@ export default function ItemPage() {
         ctx.drawImage(img, 0, 0, width, height)
         resolve({ imageBase64: canvas.toDataURL('image/jpeg', 0.85).split(',')[1], mediaType: 'image/jpeg' })
       }
-      img.onerror = reject
-      img.src = url
+      img.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error('Image load failed')) }
+      img.src = objectUrl
     })
   }
 
@@ -164,6 +170,7 @@ export default function ItemPage() {
   async function handleGenerateDescription() {
     setGenerating(true)
     setSuggestions(null)
+    setAnalyzeError(null)
     setAppliedKeys(new Set())
     try {
       const existingUrls = (item?.photos ?? []).filter(url => !removedPhotoUrls.has(url))
@@ -179,9 +186,14 @@ export default function ItemPage() {
         body: JSON.stringify({ images, userContext: userContext.trim() || undefined }),
       })
       const data = await apiRes.json()
-      if (data && !data.error) setSuggestions(data)
+      if (data?.error) {
+        setAnalyzeError(data.error)
+      } else if (data) {
+        setSuggestions(data)
+      }
     } catch (err) {
-      console.error(err)
+      const msg = err instanceof Error ? err.message : (err as { message?: string })?.message ?? 'Analysis failed'
+      setAnalyzeError(msg)
     }
     setGenerating(false)
   }
@@ -392,6 +404,9 @@ export default function ItemPage() {
                       </>
                     )}
                   </button>
+                  {analyzeError && (
+                    <p className="text-xs text-red-500 text-center px-2">{analyzeError}</p>
+                  )}
                 </div>
               )}
 
