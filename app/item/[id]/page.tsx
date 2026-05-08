@@ -116,7 +116,7 @@ export default function ItemPage() {
   }
 
   async function resizeUrl(url: string): Promise<{ imageBase64: string; mediaType: string }> {
-    const MAX_DIM = 1568
+    const MAX_DIM = 1200
     // Fetch as blob so the canvas is never cross-origin tainted
     const res = await fetch(url)
     if (!res.ok) throw new Error(`Failed to fetch photo (${res.status})`)
@@ -144,7 +144,7 @@ export default function ItemPage() {
   }
 
   async function resizeFile(file: File): Promise<{ imageBase64: string; mediaType: string }> {
-    const MAX_DIM = 1568
+    const MAX_DIM = 1200
     return new Promise((resolve, reject) => {
       const img = new Image()
       const url = URL.createObjectURL(file)
@@ -174,18 +174,31 @@ export default function ItemPage() {
     setAppliedKeys(new Set())
     try {
       const existingUrls = (item?.photos ?? []).filter(url => !removedPhotoUrls.has(url))
+      console.log('[analyze] photo count:', existingUrls.length + newPhotos.length)
       const [existingImages, newImages] = await Promise.all([
         Promise.all(existingUrls.map(resizeUrl)),
         Promise.all(newPhotos.map(resizeFile)),
       ])
       const images = [...existingImages, ...newImages]
-      if (!images.length) return
+      console.log('[analyze] images ready:', images.length)
+      if (!images.length) { setAnalyzeError('No photos found to analyze'); return }
+      const body = JSON.stringify({ images, userContext: userContext.trim() || undefined })
+      console.log('[analyze] payload size (bytes):', body.length)
       const apiRes = await fetch('/api/generate-description', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ images, userContext: userContext.trim() || undefined }),
+        body,
       })
-      const data = await apiRes.json()
+      console.log('[analyze] API status:', apiRes.status)
+      const text = await apiRes.text()
+      console.log('[analyze] API response (first 300 chars):', text.slice(0, 300))
+      let data: Record<string, string>
+      try {
+        data = JSON.parse(text)
+      } catch {
+        setAnalyzeError(`Server returned unexpected response (status ${apiRes.status})`)
+        return
+      }
       if (data?.error) {
         setAnalyzeError(data.error)
       } else if (data) {
@@ -193,6 +206,7 @@ export default function ItemPage() {
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : (err as { message?: string })?.message ?? 'Analysis failed'
+      console.error('[analyze] caught error:', err)
       setAnalyzeError(msg)
     }
     setGenerating(false)
@@ -281,6 +295,14 @@ export default function ItemPage() {
         </header>
 
         <main className="flex-1 max-w-4xl mx-auto w-full">
+
+          {/* AI error banner */}
+          {analyzeError && (
+            <div className="mx-4 sm:mx-6 mt-4 bg-red-50 border border-red-200 rounded-2xl p-4 sm:p-5">
+              <p className="text-xs text-red-600 uppercase tracking-wider mb-1">Analysis failed</p>
+              <p className="text-sm text-red-700">{analyzeError}</p>
+            </div>
+          )}
 
           {/* AI Suggestions banner */}
           {suggestions && (
