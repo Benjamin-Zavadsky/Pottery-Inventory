@@ -236,6 +236,12 @@ export default function ItemPage() {
     router.push('/')
   }
 
+  async function handlePermanentDelete() {
+    if (!confirm(`Permanently delete ${item?.sku}? This cannot be undone.`)) return
+    await supabase.from('pottery').delete().eq('id', id)
+    router.push('/')
+  }
+
   if (!item) return (
     <div className="min-h-screen flex items-center justify-center text-sm text-[#6b6b6b]">Loading...</div>
   )
@@ -274,9 +280,15 @@ export default function ItemPage() {
                 </>
               ) : (
                 <>
-                  <button onClick={handleArchive} className="text-sm text-[#6b6b6b] hover:text-red-500 transition-colors hidden sm:block">
-                    Archive
-                  </button>
+                  {item.status === 'Archived' ? (
+                    <button onClick={handlePermanentDelete} className="text-sm text-red-500 hover:text-red-700 transition-colors">
+                      Delete
+                    </button>
+                  ) : (
+                    <button onClick={handleArchive} className="text-sm text-[#6b6b6b] hover:text-red-500 transition-colors hidden sm:block">
+                      Archive
+                    </button>
+                  )}
                   <button
                     onClick={() => setEditing(true)}
                     className="bg-[#111] text-white text-sm px-4 py-2 rounded-xl hover:bg-[#333] transition-colors"
@@ -424,12 +436,18 @@ export default function ItemPage() {
                 </div>
               )}
 
-              {/* Mobile archive button */}
+              {/* Mobile archive / delete button */}
               {user && !editing && (
                 <div className="px-4 sm:px-0 pb-4 mt-2 sm:hidden">
-                  <button onClick={handleArchive} className="w-full border border-[#e5e5e5] bg-white rounded-xl py-2.5 text-sm text-[#6b6b6b] hover:border-red-300 hover:text-red-500 transition-colors">
-                    Archive this piece
-                  </button>
+                  {item.status === 'Archived' ? (
+                    <button onClick={handlePermanentDelete} className="w-full border border-red-200 bg-white rounded-xl py-2.5 text-sm text-red-500 hover:border-red-400 hover:text-red-700 transition-colors">
+                      Permanently delete
+                    </button>
+                  ) : (
+                    <button onClick={handleArchive} className="w-full border border-[#e5e5e5] bg-white rounded-xl py-2.5 text-sm text-[#6b6b6b] hover:border-red-300 hover:text-red-500 transition-colors">
+                      Archive this piece
+                    </button>
+                  )}
                 </div>
               )}
             </div>
