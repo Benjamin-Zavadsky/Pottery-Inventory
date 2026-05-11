@@ -36,12 +36,16 @@ function buildTextPrompt(imageCount: number, userContext?: string): string {
     : `Examine this pottery piece with rigorous attention to its specific visual details. Do NOT give a generic response — every observation must be grounded in what is actually visible in this image.`
 
   const contextBlock = userContext
-    ? `\n\nThe collector has provided the following personal observations and context about this piece. Factor these into your analysis — they may clarify attribution, condition, or provenance:\n\n"${userContext}"\n`
+    ? `\n\nThe collector has provided the following observations and context. Factor these into your analysis:\n\n"${userContext}"\n`
     : ''
+
+  const researchNotesField = userContext
+    ? `"research_notes": "Incorporate the collector's observations above. Add any additional iconographic parallels, typological notes, or recommended next steps (paste analysis, TL dating) that are directly supported by what is visible."`
+    : `"research_notes": null`
 
   return `${intro}${contextBlock}
 
-Analyze these diagnostic features before drawing conclusions:
+Before filling any field, analyze these diagnostic features:
 - FORM: vessel shape, rim profile, base type, handle/appendage style, proportions
 - SURFACE TREATMENT: slip color and finish (burnished/matte/polished), surface texture
 - DECORATION: specific motifs and their placement, color combinations, painting technique (positive/negative), incising, modeling, appliqué
@@ -50,21 +54,23 @@ Analyze these diagnostic features before drawing conclusions:
 - ICONOGRAPHY: name specific symbols or design systems and which tradition(s) they belong to
 - CONDITION: damage, repairs, wear, patina consistency
 
-Return ONLY a single valid JSON object — no explanation, no markdown, no text before or after, no offers to provide additional information:
+Write the description field first. Every other field must be a concise extract of facts already stated in the description — do not introduce new observations in the short fields.
+
+Return ONLY a single valid JSON object — no explanation, no markdown, no text before or after:
 
 {
-  "description": "3-5 sentences grounded in specific visible features — form, surface treatment, decorative motifs, construction technique, and distinguishing characteristics. Name the ceramic tradition if identifiable.",
-  "name": "specific name referencing the ceramic tradition (e.g. 'Mississippian Zoomorphic Effigy Vessel', 'Moundville Engraved Bottle')",
-  "place_of_origin": "specific region and tradition based on diagnostic features. If two traditions share the visible features, name both and explain what distinguishes them. Never default to a single confident attribution when evidence is ambiguous.",
-  "age": "estimated date range with cultural period name — null if indeterminate",
-  "color": "specific colors observed",
-  "use_function": "inferred function based on form",
-  "tribe_culture": "named cultural tradition or archaeological phase, with confidence qualifier",
-  "condition": "one of: Mint, Excellent, Good, Fair, Poor",
-  "rarity": "one of: Common, Uncommon, Rare, Museum-Grade",
-  "originality": "one of: Authenticated Original, Suspected Original, Reproduction, Unknown",
-  "dimensions": "estimated dimensions if scale is visible — null otherwise",
-  "research_notes": "iconographic observations, parallels to known examples, typological features, and what additional examination (paste analysis, TL dating) would confirm the attribution. Written as a completed note."
+  "description": "Detailed account of this specific piece. Every sentence must state a concrete observable fact — form, surface treatment, decorative motifs, construction technique, paste characteristics, condition, and attribution with reasoning. No filler phrases ('it is worth noting', 'this piece appears to be', 'overall'). No hedging sentences that add no information. State uncertainty directly and specifically when evidence is ambiguous.",
+  "name": "Specific name referencing tradition and form. 15 words max.",
+  "place_of_origin": "Specific region and tradition from diagnostic features. If ambiguous, name both candidates. 15 words max.",
+  "age": "Date range and cultural period name. 15 words max. null if indeterminate.",
+  "color": "Specific colors of clay body, slip, and decoration as observed. 15 words max.",
+  "use_function": "Inferred function based on form and context. 15 words max.",
+  "tribe_culture": "Named cultural tradition or archaeological phase. 15 words max.",
+  "condition": "One of exactly: Mint, Excellent, Good, Fair, Poor",
+  "rarity": "One of exactly: Common, Uncommon, Rare, Museum-Grade",
+  "originality": "One of exactly: Authenticated Original, Suspected Original, Reproduction, Unknown",
+  "dimensions": "Estimated dimensions if scale is visible. 15 words max. null otherwise.",
+  ${researchNotesField}
 }`
 }
 
@@ -110,7 +116,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to parse response' }, { status: 500 })
     }
 
-    return NextResponse.json(JSON.parse(jsonMatch[0]))
+    const result = JSON.parse(jsonMatch[0])
+    if (!body.userContext) result.research_notes = null
+
+    return NextResponse.json(result)
   } catch (err) {
     console.error('Claude API error:', err)
     return NextResponse.json({ error: 'Failed to generate description' }, { status: 500 })
