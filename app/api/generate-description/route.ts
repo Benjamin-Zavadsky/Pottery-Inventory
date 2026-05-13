@@ -39,10 +39,6 @@ function buildTextPrompt(imageCount: number, userContext?: string): string {
     ? `\n\nThe collector has provided the following observations and context. Factor these into your analysis:\n\n"${userContext}"\n`
     : ''
 
-  const researchNotesField = userContext
-    ? `"research_notes": "Incorporate the collector's observations above. Add any additional iconographic parallels, typological notes, or recommended next steps (paste analysis, TL dating) that are directly supported by what is visible."`
-    : `"research_notes": null`
-
   return `${intro}${contextBlock}
 
 Before filling any field, analyze these diagnostic features:
@@ -69,8 +65,7 @@ Return ONLY a single valid JSON object — no explanation, no markdown, no text 
   "condition": "One of exactly: Mint, Excellent, Good, Fair, Poor",
   "rarity": "One of exactly: Common, Uncommon, Rare, Museum-Grade",
   "originality": "One of exactly: Authenticated Original, Suspected Original, Reproduction, Unknown",
-  "dimensions": "Estimated dimensions if scale is visible. 15 words max. null otherwise.",
-  ${researchNotesField}
+  "dimensions": "Estimated dimensions if scale is visible. 15 words max. null otherwise."
 }`
 }
 
@@ -117,7 +112,7 @@ export async function POST(request: NextRequest) {
     }
 
     const result = JSON.parse(jsonMatch[0])
-    if (!body.userContext) result.research_notes = null
+    result.research_notes = null
 
     return NextResponse.json(result)
   } catch (err) {
