@@ -1,8 +1,6 @@
 'use client'
 
-import { useMemo, useRef, useEffect, useState } from 'react'
-import Tree from 'react-d3-tree'
-import type { RenderCustomNodeElementFn } from 'react-d3-tree'
+import { useState, useMemo } from 'react'
 import { CULTURES, REGION_COLORS } from '@/lib/constants'
 import type { PotteryItem } from '@/lib/types'
 import type { Region } from '@/lib/constants'
@@ -12,14 +10,7 @@ interface Props {
   onEditPiece: (item: PotteryItem) => void
 }
 
-interface RawNodeDatum {
-  name: string
-  attributes?: Record<string, string | number>
-  children?: RawNodeDatum[]
-  _item?: PotteryItem
-  _region?: Region
-  _regionColor?: string
-}
+const REGION_ORDER: Region[] = ['North America', 'Mesoamerica', 'South America', 'Caribbean / Amazonia']
 
 function piecesForCulture(items: PotteryItem[], cultureName: string): PotteryItem[] {
   const needle = cultureName.toLowerCase()
@@ -30,140 +21,150 @@ function piecesForCulture(items: PotteryItem[], cultureName: string): PotteryIte
   })
 }
 
-const REGION_ORDER: Region[] = ['North America', 'Mesoamerica', 'South America', 'Caribbean / Amazonia']
-
 export default function InventoryTree({ items, onEditPiece }: Props) {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const [dims, setDims] = useState({ width: 800, height: 600 })
+  const [expandedRegions, setExpandedRegions] = useState<Set<Region>>(new Set(REGION_ORDER))
+  const [expandedCultures, setExpandedCultures] = useState<Set<string>>(new Set())
 
-  useEffect(() => {
-    if (containerRef.current) {
-      setDims({ width: containerRef.current.clientWidth, height: containerRef.current.clientHeight })
-    }
-  }, [])
-
-  const treeData = useMemo<RawNodeDatum>(() => ({
-    name: 'Collection',
-    attributes: { total: items.length },
-    children: REGION_ORDER.map(region => {
-      const color = REGION_COLORS[region]
-      const culturesInRegion = CULTURES.filter(c => c.region === region)
-      return {
-        name: region,
-        _region: region,
-        _regionColor: color,
-        children: culturesInRegion.map(c => {
-          const pieces = piecesForCulture(items, c.culture)
-          return {
-            name: c.culture,
-            _regionColor: color,
-            attributes: { count: pieces.length },
-            children: pieces.map(p => ({
-              name: p.name,
-              _regionColor: color,
-              attributes: { sku: p.sku, age: p.age ?? '' },
-              _item: p,
-            })),
-          }
-        }),
-      }
+  const tree = useMemo(() =>
+    REGION_ORDER.map(region => {
+      const cultures = CULTURES.filter(c => c.region === region).map(c => ({
+        ...c,
+        pieces: piecesForCulture(items, c.culture),
+      }))
+      return { region, color: REGION_COLORS[region], cultures, total: cultures.reduce((s, c) => s + c.pieces.length, 0) }
     }),
-  }), [items])
+  [items])
 
-  function renderNode({ nodeDatum, toggleNode }: { nodeDatum: RawNodeDatum; toggleNode: () => void }) {
-    const isRoot = nodeDatum.name === 'Collection'
-    const isRegion = !!nodeDatum._region
-    const isPiece = !!nodeDatum._item
-    const isCulture = !isRoot && !isRegion && !isPiece
-    const regionColor = nodeDatum._regionColor ?? '#888'
+  function toggleRegion(region: Region) {
+    setExpandedRegions(prev => {
+      const next = new Set(prev)
+      next.has(region) ? next.delete(region) : next.add(region)
+      return next
+    })
+  }
 
-    const W = 160
-    const H = 44
-    const x = -(W / 2)
-    const y = -(H / 2)
-
-    if (isRoot) {
-      return (
-        <g onClick={toggleNode} style={{ cursor: 'pointer' }}>
-          <rect x={x} y={y} width={W} height={H} rx={10} fill="#18181b" />
-          <text x={0} textAnchor="middle" dy="-4" fontSize={12} fontWeight={600} fill="white" style={{ userSelect: 'none' }}>
-            Collection
-          </text>
-          <text x={0} textAnchor="middle" dy="11" fontSize={10} fill="#71717a" style={{ userSelect: 'none' }}>
-            {items.length} pieces
-          </text>
-        </g>
-      )
-    }
-
-    if (isRegion) {
-      return (
-        <g onClick={toggleNode} style={{ cursor: 'pointer' }}>
-          <rect x={x} y={y} width={W} height={H} rx={10} fill={regionColor} />
-          <text x={0} textAnchor="middle" dy="5" fontSize={11} fontWeight={600} fill="white" style={{ userSelect: 'none' }}>
-            {nodeDatum.name}
-          </text>
-        </g>
-      )
-    }
-
-    if (isCulture) {
-      const count = Number(nodeDatum.attributes?.count ?? 0)
-      const isEmpty = count === 0
-      return (
-        <g onClick={toggleNode} style={{ cursor: 'pointer', opacity: isEmpty ? 0.4 : 1 }}>
-          <rect x={x} y={y} width={W} height={H} rx={9} fill="white" stroke="#e4e4e7" strokeWidth={1.5} />
-          <rect x={x} y={y} width={4} height={H} rx={2} fill={regionColor} />
-          <text x={6 - W / 2} textAnchor="start" dy="-3" fontSize={10} fontWeight={500} fill="#111827" style={{ userSelect: 'none' }}>
-            {nodeDatum.name.length > 17 ? nodeDatum.name.slice(0, 17) + '…' : nodeDatum.name}
-          </text>
-          <text x={6 - W / 2} textAnchor="start" dy="12" fontSize={9} fill="#9ca3af" style={{ userSelect: 'none' }}>
-            {count} {count === 1 ? 'piece' : 'pieces'}
-          </text>
-        </g>
-      )
-    }
-
-    if (isPiece) {
-      const PW = 150
-      const PH = 40
-      return (
-        <g style={{ cursor: 'pointer' }} onClick={() => onEditPiece(nodeDatum._item!)}>
-          <rect x={-(PW / 2)} y={-(PH / 2)} width={PW} height={PH} rx={8} fill="#fafafa" stroke="#e4e4e7" strokeWidth={1} />
-          <text x={0} textAnchor="middle" dy="-4" fontSize={9.5} fontWeight={500} fill="#111827" style={{ userSelect: 'none' }}>
-            {nodeDatum.name.length > 20 ? nodeDatum.name.slice(0, 20) + '…' : nodeDatum.name}
-          </text>
-          {nodeDatum.attributes?.age && (
-            <text x={0} textAnchor="middle" dy="10" fontSize={8.5} fill="#9ca3af" style={{ userSelect: 'none' }}>
-              {String(nodeDatum.attributes.age).slice(0, 24)}
-            </text>
-          )}
-        </g>
-      )
-    }
-
-    return null
+  function toggleCulture(culture: string) {
+    setExpandedCultures(prev => {
+      const next = new Set(prev)
+      next.has(culture) ? next.delete(culture) : next.add(culture)
+      return next
+    })
   }
 
   return (
     <div
-      ref={containerRef}
-      className="w-full rounded-2xl overflow-hidden border border-[#e4e4e7]"
+      className="w-full rounded-2xl border border-[#e4e4e7] overflow-y-auto flex flex-col"
       style={{ height: 'calc(100vh - 260px)', minHeight: 400, background: '#f8f8f9' }}
     >
-      <Tree
-        data={treeData}
-        orientation="vertical"
-        pathFunc="step"
-        translate={{ x: dims.width / 2, y: 60 }}
-        zoom={0.6}
-        initialDepth={1}
-        separation={{ siblings: 1.1, nonSiblings: 1.4 }}
-        nodeSize={{ x: 190, y: 110 }}
-        renderCustomNodeElement={renderNode as RenderCustomNodeElementFn}
-        pathClassFunc={() => 'tree-link'}
-      />
-      <style>{`.tree-link { stroke: #d4d4d8; stroke-width: 1.5px; fill: none; } .rd3t-link { stroke: #d4d4d8 !important; stroke-width: 1.5px !important; }`}</style>
+      {/* Header */}
+      <div className="sticky top-0 z-10 px-5 py-3 border-b border-[#e4e4e7] bg-white flex items-center justify-between">
+        <span className="text-xs font-semibold text-[#111] uppercase tracking-widest">Collection by Culture</span>
+        <span className="text-xs text-[#999]">{items.length} pieces</span>
+      </div>
+
+      <div className="flex flex-col divide-y divide-[#e4e4e7]">
+        {tree.map(({ region, color, cultures, total }) => {
+          const isRegionOpen = expandedRegions.has(region)
+          return (
+            <div key={region}>
+              {/* Region row */}
+              <button
+                onClick={() => toggleRegion(region)}
+                className="w-full flex items-center gap-3 px-5 py-4 hover:bg-white/70 transition-colors text-left"
+              >
+                <div className="w-1 h-7 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                <span className="flex-1 text-sm font-semibold text-[#111]">{region}</span>
+                <span className="text-xs text-[#999] mr-2">{total} {total === 1 ? 'piece' : 'pieces'}</span>
+                <svg
+                  width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#aaa" strokeWidth="2.5" strokeLinecap="round"
+                  className="shrink-0 transition-transform duration-200"
+                  style={{ transform: isRegionOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}
+                >
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
+
+              {/* Cultures */}
+              {isRegionOpen && (
+                <div className="bg-white border-t border-[#f0f0f0]">
+                  {cultures.map(({ culture, pieces }) => {
+                    const hasPieces = pieces.length > 0
+                    const isCultureOpen = expandedCultures.has(culture)
+                    return (
+                      <div key={culture} className="border-b border-[#f5f5f5] last:border-0">
+                        {/* Culture row */}
+                        <button
+                          onClick={() => hasPieces && toggleCulture(culture)}
+                          disabled={!hasPieces}
+                          className={`w-full flex items-center gap-3 pl-9 pr-5 py-3 text-left transition-colors ${hasPieces ? 'hover:bg-[#fafafa] cursor-pointer' : 'cursor-default opacity-40'}`}
+                        >
+                          <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: color, opacity: 0.6 }} />
+                          <span className="flex-1 text-sm text-[#333]">{culture}</span>
+                          <span className="text-xs text-[#bbb] mr-2">{pieces.length} {pieces.length === 1 ? 'piece' : 'pieces'}</span>
+                          {hasPieces && (
+                            <svg
+                              width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ccc" strokeWidth="2.5" strokeLinecap="round"
+                              className="shrink-0 transition-transform duration-200"
+                              style={{ transform: isCultureOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}
+                            >
+                              <polyline points="6 9 12 15 18 9" />
+                            </svg>
+                          )}
+                        </button>
+
+                        {/* Piece cards */}
+                        {isCultureOpen && hasPieces && (
+                          <div className="pl-9 pr-5 pb-4 pt-1 overflow-x-auto">
+                            <div className="flex gap-3" style={{ width: 'max-content' }}>
+                              {pieces.map(piece => (
+                                <button
+                                  key={piece.id}
+                                  onClick={() => onEditPiece(piece)}
+                                  className="flex flex-col items-start w-[100px] shrink-0 group"
+                                >
+                                  {/* Photo */}
+                                  <div className="w-[100px] h-[100px] rounded-xl overflow-hidden bg-[#f0f0f0] border border-[#e4e4e7] group-hover:border-[#bbb] transition-colors mb-2">
+                                    {piece.photos?.[0] ? (
+                                      // eslint-disable-next-line @next/next/no-img-element
+                                      <img
+                                        src={piece.photos[0]}
+                                        alt={piece.name}
+                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                      />
+                                    ) : (
+                                      <div className="w-full h-full flex items-center justify-center">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ccc" strokeWidth="1.5">
+                                          <rect x="3" y="3" width="18" height="18" rx="2" />
+                                          <circle cx="8.5" cy="8.5" r="1.5" />
+                                          <polyline points="21 15 16 10 5 21" />
+                                        </svg>
+                                      </div>
+                                    )}
+                                  </div>
+                                  {/* Name */}
+                                  <p className="text-[11px] font-medium text-[#111] leading-tight line-clamp-2 w-full text-left">
+                                    {piece.name}
+                                  </p>
+                                  {/* SKU */}
+                                  <p className="text-[10px] text-[#bbb] font-mono mt-0.5">{piece.sku}</p>
+                                  {/* Condition dot */}
+                                  {piece.condition && (
+                                    <p className="text-[10px] text-[#999] mt-0.5">{piece.condition}</p>
+                                  )}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
