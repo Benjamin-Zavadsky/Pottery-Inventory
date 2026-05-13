@@ -1,11 +1,24 @@
 'use client'
 
 import { useEffect, useState, useCallback, useMemo } from 'react'
+import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 import type { PotteryItem } from '@/lib/types'
 import BottomNav from '@/components/BottomNav'
 import type { User } from '@supabase/supabase-js'
+
+type ViewMode = 'grid' | 'map' | 'tree'
+
+const InventoryMap = dynamic(() => import('@/components/InventoryMap'), {
+  ssr: false,
+  loading: () => <div className="w-full bg-[#f3f3f3] rounded-2xl flex items-center justify-center text-sm text-[#aaa]" style={{ height: 'calc(100vh - 260px)', minHeight: 400 }}>Loading map…</div>,
+})
+const InventoryTree = dynamic(() => import('@/components/InventoryTree'), {
+  ssr: false,
+  loading: () => <div className="w-full bg-[#f3f3f3] rounded-2xl flex items-center justify-center text-sm text-[#aaa]" style={{ height: 'calc(100vh - 260px)', minHeight: 400 }}>Loading tree…</div>,
+})
+const PieceModal = dynamic(() => import('@/components/PieceModal'), { ssr: false })
 
 const CONDITIONS = ['Mint', 'Excellent', 'Good', 'Fair', 'Poor']
 const RARITIES = ['Common', 'Uncommon', 'Rare', 'Museum-Grade']
@@ -40,6 +53,10 @@ export default function HomePage() {
   const [showFilters, setShowFilters] = useState(false)
   const [dynamicOptions, setDynamicOptions] = useState<Record<string, string[]>>({})
   const [user, setUser] = useState<User | null>(null)
+  const [viewMode, setViewMode] = useState<ViewMode>('grid')
+  const [modalOpen, setModalOpen] = useState(false)
+  const [modalMode, setModalMode] = useState<'add' | 'edit'>('add')
+  const [modalItem, setModalItem] = useState<PotteryItem | null>(null)
   const supabase = useMemo(() => createClient(), [])
 
   const fetchItems = useCallback(async () => {
@@ -96,6 +113,15 @@ export default function HomePage() {
 
   function clearFilters() {
     setFilters(EMPTY_FILTERS)
+  }
+
+  function openAdd() { setModalMode('add'); setModalItem(null); setModalOpen(true) }
+  function openEdit(item: PotteryItem) { setModalMode('edit'); setModalItem(item); setModalOpen(true) }
+  function handleSaved(updated: PotteryItem) {
+    setItems(prev => prev.some(i => i.id === updated.id)
+      ? prev.map(i => i.id === updated.id ? updated : i)
+      : [updated, ...prev])
+    setModalOpen(false)
   }
 
   async function handleLogout() {
@@ -167,61 +193,80 @@ export default function HomePage() {
 
         <main className="flex-1 max-w-6xl mx-auto w-full px-4 sm:px-6 py-4 sm:py-8 pb-nav sm:pb-8">
 
-          {/* Search + Filter row */}
-          <div className="flex gap-2 sm:gap-3 mb-3">
-            <input
-              type="search"
-              placeholder="Search name, SKU, origin, color..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="flex-1 border border-[#e5e5e5] rounded-xl px-4 py-2.5 text-sm bg-white focus:outline-none focus:border-[#111] transition-colors"
-            />
-            <select
-              value={sort}
-              onChange={e => setSort(e.target.value as 'newest' | 'oldest')}
-              className="hidden sm:block border border-[#e5e5e5] rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#111] transition-colors"
-            >
-              <option value="newest">Newest First</option>
-              <option value="oldest">Oldest First</option>
-            </select>
-            <button
-              onClick={() => setShowFilters(f => !f)}
-              className={`flex items-center gap-1.5 border rounded-xl px-3 py-2.5 text-sm transition-colors whitespace-nowrap ${showFilters ? 'bg-[#111] text-white border-[#111]' : 'bg-white border-[#e5e5e5]'}`}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <line x1="4" y1="6" x2="20" y2="6" />
-                <line x1="8" y1="12" x2="16" y2="12" />
-                <line x1="11" y1="18" x2="13" y2="18" />
-              </svg>
-              <span className="hidden sm:inline">Filters</span>
-              {activeFilterCount > 0 && (
-                <span className={`text-xs rounded-full w-4 h-4 flex items-center justify-center font-semibold ${showFilters ? 'bg-white text-[#111]' : 'bg-[#111] text-white'}`}>
-                  {activeFilterCount}
-                </span>
-              )}
-            </button>
+          {/* View toggle */}
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex gap-0.5 bg-[#f3f3f3] p-1 rounded-xl">
+              {(['grid', 'map', 'tree'] as ViewMode[]).map(v => (
+                <button
+                  key={v}
+                  onClick={() => setViewMode(v)}
+                  className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${viewMode === v ? 'bg-white text-[#111] shadow-sm' : 'text-[#6b6b6b] hover:text-[#111]'}`}
+                >
+                  {v === 'grid' ? 'Grid' : v === 'map' ? 'Map' : 'Tree'}
+                </button>
+              ))}
+            </div>
           </div>
 
-          {/* Mobile: sort pills */}
-          <div className="flex gap-2 mb-4 sm:hidden">
-            {(['newest', 'oldest'] as const).map(s => (
-              <button
-                key={s}
-                onClick={() => setSort(s)}
-                className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${sort === s ? 'bg-[#111] text-white border-[#111]' : 'bg-white text-[#6b6b6b] border-[#e5e5e5]'}`}
+          {/* Search + Filter row — grid only */}
+          {viewMode === 'grid' && (
+            <div className="flex gap-2 sm:gap-3 mb-3">
+              <input
+                type="search"
+                placeholder="Search name, SKU, origin, color..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="flex-1 border border-[#e5e5e5] rounded-xl px-4 py-2.5 text-sm bg-white focus:outline-none focus:border-[#111] transition-colors"
+              />
+              <select
+                value={sort}
+                onChange={e => setSort(e.target.value as 'newest' | 'oldest')}
+                className="hidden sm:block border border-[#e5e5e5] rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#111] transition-colors"
               >
-                {s === 'newest' ? 'Newest first' : 'Oldest first'}
+                <option value="newest">Newest First</option>
+                <option value="oldest">Oldest First</option>
+              </select>
+              <button
+                onClick={() => setShowFilters(f => !f)}
+                className={`flex items-center gap-1.5 border rounded-xl px-3 py-2.5 text-sm transition-colors whitespace-nowrap ${showFilters ? 'bg-[#111] text-white border-[#111]' : 'bg-white border-[#e5e5e5]'}`}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <line x1="4" y1="6" x2="20" y2="6" />
+                  <line x1="8" y1="12" x2="16" y2="12" />
+                  <line x1="11" y1="18" x2="13" y2="18" />
+                </svg>
+                <span className="hidden sm:inline">Filters</span>
+                {activeFilterCount > 0 && (
+                  <span className={`text-xs rounded-full w-4 h-4 flex items-center justify-center font-semibold ${showFilters ? 'bg-white text-[#111]' : 'bg-[#111] text-white'}`}>
+                    {activeFilterCount}
+                  </span>
+                )}
               </button>
-            ))}
-            {activeFilterCount > 0 && (
-              <button onClick={clearFilters} className="text-xs px-3 py-1.5 rounded-full border border-[#e5e5e5] bg-white text-[#6b6b6b]">
-                Clear filters
-              </button>
-            )}
-          </div>
+            </div>
+          )}
 
-          {/* Desktop: inline filter panel */}
-          {showFilters && (
+          {/* Mobile: sort pills — grid only */}
+          {viewMode === 'grid' && (
+            <div className="flex gap-2 mb-4 sm:hidden">
+              {(['newest', 'oldest'] as const).map(s => (
+                <button
+                  key={s}
+                  onClick={() => setSort(s)}
+                  className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${sort === s ? 'bg-[#111] text-white border-[#111]' : 'bg-white text-[#6b6b6b] border-[#e5e5e5]'}`}
+                >
+                  {s === 'newest' ? 'Newest first' : 'Oldest first'}
+                </button>
+              ))}
+              {activeFilterCount > 0 && (
+                <button onClick={clearFilters} className="text-xs px-3 py-1.5 rounded-full border border-[#e5e5e5] bg-white text-[#6b6b6b]">
+                  Clear filters
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Desktop: inline filter panel — grid only */}
+          {viewMode === 'grid' && showFilters && (
             <div className="hidden sm:block bg-white border border-[#e5e5e5] rounded-2xl p-5 mb-6">
               <div className="flex items-center justify-between mb-4">
                 <p className="text-xs text-[#6b6b6b] uppercase tracking-wider">Filter by</p>
@@ -235,8 +280,8 @@ export default function HomePage() {
             </div>
           )}
 
-          {/* Mobile: filter bottom sheet */}
-          {showFilters && (
+          {/* Mobile: filter bottom sheet — grid only */}
+          {viewMode === 'grid' && showFilters && (
             <div className="sm:hidden fixed inset-0 z-30 flex flex-col justify-end">
               <div className="absolute inset-0 bg-black/40" onClick={() => setShowFilters(false)} />
               <div className="relative bg-white rounded-t-3xl flex flex-col max-h-[82vh]">
@@ -270,21 +315,54 @@ export default function HomePage() {
           )}
 
           {/* Grid */}
-          {loading ? (
-            <div className="text-center text-[#6b6b6b] py-20 text-sm">Loading...</div>
-          ) : filtered.length === 0 ? (
-            <div className="flex flex-col items-center py-20 gap-3">
-              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#ccc" strokeWidth="1.5"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
-              <p className="text-sm text-[#6b6b6b]">No pieces found.</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-5">
-              {filtered.map((item, i) => (
-                <PotteryCard key={item.id} item={item} isRecent={i < 3 && sort === 'newest' && !search && activeFilterCount === 0} />
-              ))}
-            </div>
+          {viewMode === 'grid' && (
+            loading ? (
+              <div className="text-center text-[#6b6b6b] py-20 text-sm">Loading...</div>
+            ) : filtered.length === 0 ? (
+              <div className="flex flex-col items-center py-20 gap-3">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#ccc" strokeWidth="1.5"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
+                <p className="text-sm text-[#6b6b6b]">No pieces found.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-5">
+                {filtered.map((item, i) => (
+                  <PotteryCard key={item.id} item={item} isRecent={i < 3 && sort === 'newest' && !search && activeFilterCount === 0} />
+                ))}
+              </div>
+            )
+          )}
+
+          {/* Map */}
+          {viewMode === 'map' && !loading && (
+            <InventoryMap items={items} onEditPiece={openEdit} />
+          )}
+
+          {/* Tree */}
+          {viewMode === 'tree' && !loading && (
+            <InventoryTree items={items} onEditPiece={openEdit} />
           )}
         </main>
+
+        {/* Floating + button */}
+        {user && (
+          <button
+            onClick={openAdd}
+            className="fixed bottom-24 right-4 sm:bottom-8 sm:right-6 z-20 w-14 h-14 bg-[#111] text-white rounded-full shadow-xl flex items-center justify-center text-2xl hover:bg-[#333] transition-colors"
+            aria-label="Add piece"
+          >
+            +
+          </button>
+        )}
+
+        {/* Quick add/edit modal */}
+        {modalOpen && (
+          <PieceModal
+            mode={modalMode}
+            item={modalItem ?? undefined}
+            onClose={() => setModalOpen(false)}
+            onSaved={handleSaved}
+          />
+        )}
 
         <BottomNav />
       </div>
