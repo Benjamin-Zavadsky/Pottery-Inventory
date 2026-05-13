@@ -18,6 +18,7 @@ interface RawNodeDatum {
   children?: RawNodeDatum[]
   _item?: PotteryItem
   _region?: Region
+  _regionColor?: string
 }
 
 function piecesForCulture(items: PotteryItem[], cultureName: string): PotteryItem[] {
@@ -33,11 +34,11 @@ const REGION_ORDER: Region[] = ['North America', 'Mesoamerica', 'South America',
 
 export default function InventoryTree({ items, onEditPiece }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const [containerHeight, setContainerHeight] = useState(600)
+  const [dims, setDims] = useState({ width: 800, height: 600 })
 
   useEffect(() => {
     if (containerRef.current) {
-      setContainerHeight(containerRef.current.clientHeight)
+      setDims({ width: containerRef.current.clientWidth, height: containerRef.current.clientHeight })
     }
   }, [])
 
@@ -45,17 +46,21 @@ export default function InventoryTree({ items, onEditPiece }: Props) {
     name: 'Collection',
     attributes: { total: items.length },
     children: REGION_ORDER.map(region => {
+      const color = REGION_COLORS[region]
       const culturesInRegion = CULTURES.filter(c => c.region === region)
       return {
         name: region,
         _region: region,
+        _regionColor: color,
         children: culturesInRegion.map(c => {
           const pieces = piecesForCulture(items, c.culture)
           return {
             name: c.culture,
+            _regionColor: color,
             attributes: { count: pieces.length },
             children: pieces.map(p => ({
               name: p.name,
+              _regionColor: color,
               attributes: { sku: p.sku, age: p.age ?? '' },
               _item: p,
             })),
@@ -70,38 +75,31 @@ export default function InventoryTree({ items, onEditPiece }: Props) {
     const isRegion = !!nodeDatum._region
     const isPiece = !!nodeDatum._item
     const isCulture = !isRoot && !isRegion && !isPiece
+    const regionColor = nodeDatum._regionColor ?? '#888'
 
-    if (isPiece) {
-      return (
-        <g>
-          <rect x={-70} y={-20} width={140} height={40} rx={6} fill="white" stroke="#e5e5e5" strokeWidth={1} style={{ cursor: 'pointer' }} onClick={() => onEditPiece(nodeDatum._item!)} />
-          <text x={0} textAnchor="middle" dy="-4" fontSize={10} fontWeight={500} fill="#111" style={{ pointerEvents: 'none', userSelect: 'none' }}>
-            {nodeDatum.name.length > 20 ? nodeDatum.name.slice(0, 20) + '…' : nodeDatum.name}
-          </text>
-          {nodeDatum.attributes?.age && (
-            <text x={0} textAnchor="middle" dy="10" fontSize={9} fill="#aaa" style={{ pointerEvents: 'none', userSelect: 'none' }}>
-              {String(nodeDatum.attributes.age).slice(0, 22)}
-            </text>
-          )}
-        </g>
-      )
-    }
+    const W = 160
+    const H = 44
+    const x = -(W / 2)
+    const y = -(H / 2)
 
     if (isRoot) {
       return (
         <g onClick={toggleNode} style={{ cursor: 'pointer' }}>
-          <rect x={-80} y={-22} width={160} height={44} rx={8} fill="#111" />
-          <text x={0} textAnchor="middle" dy="-4" fontSize={12} fontWeight={600} fill="white" style={{ userSelect: 'none' }}>Collection</text>
-          <text x={0} textAnchor="middle" dy="11" fontSize={10} fill="#aaa" style={{ userSelect: 'none' }}>{items.length} pieces</text>
+          <rect x={x} y={y} width={W} height={H} rx={10} fill="#18181b" />
+          <text x={0} textAnchor="middle" dy="-4" fontSize={12} fontWeight={600} fill="white" style={{ userSelect: 'none' }}>
+            Collection
+          </text>
+          <text x={0} textAnchor="middle" dy="11" fontSize={10} fill="#71717a" style={{ userSelect: 'none' }}>
+            {items.length} pieces
+          </text>
         </g>
       )
     }
 
     if (isRegion) {
-      const color = REGION_COLORS[nodeDatum._region!]
       return (
         <g onClick={toggleNode} style={{ cursor: 'pointer' }}>
-          <rect x={-80} y={-20} width={160} height={40} rx={7} fill={color} />
+          <rect x={x} y={y} width={W} height={H} rx={10} fill={regionColor} />
           <text x={0} textAnchor="middle" dy="5" fontSize={11} fontWeight={600} fill="white" style={{ userSelect: 'none' }}>
             {nodeDatum.name}
           </text>
@@ -113,14 +111,33 @@ export default function InventoryTree({ items, onEditPiece }: Props) {
       const count = Number(nodeDatum.attributes?.count ?? 0)
       const isEmpty = count === 0
       return (
-        <g onClick={toggleNode} style={{ cursor: 'pointer', opacity: isEmpty ? 0.45 : 1 }}>
-          <rect x={-72} y={-18} width={144} height={36} rx={6} fill={isEmpty ? '#f3f3f3' : 'white'} stroke="#e5e5e5" strokeWidth={1} />
-          <text x={0} textAnchor="middle" dy="-3" fontSize={10} fontWeight={500} fill="#333" style={{ userSelect: 'none' }}>
-            {nodeDatum.name.length > 18 ? nodeDatum.name.slice(0, 18) + '…' : nodeDatum.name}
+        <g onClick={toggleNode} style={{ cursor: 'pointer', opacity: isEmpty ? 0.4 : 1 }}>
+          <rect x={x} y={y} width={W} height={H} rx={9} fill="white" stroke="#e4e4e7" strokeWidth={1.5} />
+          <rect x={x} y={y} width={4} height={H} rx={2} fill={regionColor} />
+          <text x={6 - W / 2} textAnchor="start" dy="-3" fontSize={10} fontWeight={500} fill="#111827" style={{ userSelect: 'none' }}>
+            {nodeDatum.name.length > 17 ? nodeDatum.name.slice(0, 17) + '…' : nodeDatum.name}
           </text>
-          <text x={0} textAnchor="middle" dy="11" fontSize={9} fill="#aaa" style={{ userSelect: 'none' }}>
+          <text x={6 - W / 2} textAnchor="start" dy="12" fontSize={9} fill="#9ca3af" style={{ userSelect: 'none' }}>
             {count} {count === 1 ? 'piece' : 'pieces'}
           </text>
+        </g>
+      )
+    }
+
+    if (isPiece) {
+      const PW = 150
+      const PH = 40
+      return (
+        <g style={{ cursor: 'pointer' }} onClick={() => onEditPiece(nodeDatum._item!)}>
+          <rect x={-(PW / 2)} y={-(PH / 2)} width={PW} height={PH} rx={8} fill="#fafafa" stroke="#e4e4e7" strokeWidth={1} />
+          <text x={0} textAnchor="middle" dy="-4" fontSize={9.5} fontWeight={500} fill="#111827" style={{ userSelect: 'none' }}>
+            {nodeDatum.name.length > 20 ? nodeDatum.name.slice(0, 20) + '…' : nodeDatum.name}
+          </text>
+          {nodeDatum.attributes?.age && (
+            <text x={0} textAnchor="middle" dy="10" fontSize={8.5} fill="#9ca3af" style={{ userSelect: 'none' }}>
+              {String(nodeDatum.attributes.age).slice(0, 24)}
+            </text>
+          )}
         </g>
       )
     }
@@ -131,22 +148,22 @@ export default function InventoryTree({ items, onEditPiece }: Props) {
   return (
     <div
       ref={containerRef}
-      className="w-full bg-[#fafafa] rounded-2xl border border-[#e5e5e5] overflow-hidden"
-      style={{ height: 'calc(100vh - 260px)', minHeight: 400 }}
+      className="w-full rounded-2xl overflow-hidden border border-[#e4e4e7]"
+      style={{ height: 'calc(100vh - 260px)', minHeight: 400, background: '#f8f8f9' }}
     >
       <Tree
         data={treeData}
-        orientation="horizontal"
+        orientation="vertical"
         pathFunc="step"
-        translate={{ x: 120, y: containerHeight / 2 }}
-        zoom={0.65}
+        translate={{ x: dims.width / 2, y: 60 }}
+        zoom={0.6}
         initialDepth={1}
-        separation={{ siblings: 0.6, nonSiblings: 0.8 }}
-        nodeSize={{ x: 220, y: 55 }}
+        separation={{ siblings: 1.1, nonSiblings: 1.4 }}
+        nodeSize={{ x: 190, y: 110 }}
         renderCustomNodeElement={renderNode as RenderCustomNodeElementFn}
-        pathClassFunc={() => 'tree-path'}
+        pathClassFunc={() => 'tree-link'}
       />
-      <style>{`.tree-path { stroke: #d0d0d0; stroke-width: 1.5px; fill: none; } .rd3t-link { stroke: #d0d0d0 !important; }`}</style>
+      <style>{`.tree-link { stroke: #d4d4d8; stroke-width: 1.5px; fill: none; } .rd3t-link { stroke: #d4d4d8 !important; stroke-width: 1.5px !important; }`}</style>
     </div>
   )
 }
