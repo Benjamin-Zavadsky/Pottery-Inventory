@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { ComposableMap, Geographies, Geography, Marker, ZoomableGroup } from 'react-simple-maps'
 import { CULTURES, REGION_COLORS } from '@/lib/constants'
 import type { PotteryItem } from '@/lib/types'
@@ -35,6 +35,15 @@ export default function InventoryMap({ items, onEditPiece }: Props) {
   })
   const [tooltip, setTooltip] = useState<Tooltip | null>(null)
   const [drawer, setDrawer] = useState<{ culture: string; pieces: PotteryItem[] } | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const handler = (e: WheelEvent) => e.preventDefault()
+    el.addEventListener('wheel', handler, { passive: false })
+    return () => el.removeEventListener('wheel', handler)
+  }, [])
 
   const handleMarkerClick = useCallback((cultureName: string) => {
     const pieces = piecesForCulture(items, cultureName)
@@ -50,6 +59,7 @@ export default function InventoryMap({ items, onEditPiece }: Props) {
 
   return (
     <div
+      ref={containerRef}
       className="relative w-full rounded-2xl overflow-hidden"
       style={{ height: 'calc(100vh - 260px)', minHeight: 400, background: '#eef2f7' }}
     >
