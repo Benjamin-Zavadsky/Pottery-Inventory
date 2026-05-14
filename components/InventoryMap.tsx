@@ -120,6 +120,7 @@ export default function InventoryMap({ items, onEditPiece }: Props) {
     } | null = null
 
     const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length >= 2) e.preventDefault()
       const rect = el.getBoundingClientRect()
       const t0 = e.touches[0]
       ts = {
@@ -199,7 +200,7 @@ export default function InventoryMap({ items, onEditPiece }: Props) {
       }
     }
 
-    el.addEventListener('touchstart', onTouchStart, { passive: true })
+    el.addEventListener('touchstart', onTouchStart, { passive: false })
     el.addEventListener('touchmove', onTouchMove, { passive: false })
     el.addEventListener('touchend', onTouchEnd)
     el.addEventListener('touchcancel', onTouchEnd)
@@ -259,7 +260,7 @@ export default function InventoryMap({ items, onEditPiece }: Props) {
     <div
       ref={containerRef}
       className="relative w-full rounded-2xl overflow-hidden select-none"
-      style={{ height: 'calc(100vh - 260px)', minHeight: 400, background: '#eef2f7', cursor: dragging ? 'grabbing' : 'grab' }}
+      style={{ height: 'calc(100vh - 260px)', minHeight: 400, background: '#eef2f7', cursor: dragging ? 'grabbing' : 'grab', touchAction: 'none' }}
       onMouseDown={onMouseDown}
       onMouseMove={onMouseMove}
       onMouseUp={onMouseUp}
@@ -287,14 +288,16 @@ export default function InventoryMap({ items, onEditPiece }: Props) {
             }
           </Geographies>
 
-          {CULTURES.map(c => {
+          {(() => {
+            const markerR = Math.min(20, Math.max(5, 8 * Math.pow(rendered.projScale / BASE_SCALE, 0.4)))
+            return CULTURES.map(c => {
             const pieces = piecesForCulture(items, c.culture)
             const count = pieces.length
             const color = REGION_COLORS[c.region]
             return (
               <Marker key={c.culture} coordinates={[c.lng, c.lat]}>
                 <circle
-                  r={8}
+                  r={markerR}
                   fill={color}
                   fillOpacity={count > 0 ? 1 : 0.2}
                   stroke="white"
@@ -305,13 +308,14 @@ export default function InventoryMap({ items, onEditPiece }: Props) {
                   onClick={() => handleMarkerClick(c.culture)}
                 />
                 {count > 0 && (
-                  <text textAnchor="middle" dy="0.35em" fontSize={8} fontWeight="700" fill="white" style={{ pointerEvents: 'none', userSelect: 'none' }}>
+                  <text textAnchor="middle" dy="0.35em" fontSize={markerR * 0.85} fontWeight="700" fill="white" style={{ pointerEvents: 'none', userSelect: 'none' }}>
                     {count}
                   </text>
                 )}
               </Marker>
             )
-          })}
+          })
+          })()}
         </ComposableMap>
       </div>
 
