@@ -80,6 +80,17 @@ export default function InventoryMap({ items, onEditPiece }: Props) {
     settleTimer.current = setTimeout(commit, 200)
   }
 
+  // Block document-level scroll/bounce while any touch is inside the map
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const prevent = (e: TouchEvent) => {
+      if (el.contains(e.target as Node)) e.preventDefault()
+    }
+    document.addEventListener('touchmove', prevent, { passive: false })
+    return () => document.removeEventListener('touchmove', prevent)
+  }, [])
+
   // Wheel / trackpad pinch → zoom toward cursor
   useEffect(() => {
     const el = containerRef.current
