@@ -8,7 +8,7 @@ import type { PotteryItem } from '@/lib/types'
 import BottomNav from '@/components/BottomNav'
 import type { User } from '@supabase/supabase-js'
 
-type ViewMode = 'grid' | 'map' | 'tree'
+type ViewMode = 'grid' | 'map' | 'tree' | 'case'
 
 const InventoryMap = dynamic(() => import('@/components/InventoryMap'), {
   ssr: false,
@@ -17,6 +17,10 @@ const InventoryMap = dynamic(() => import('@/components/InventoryMap'), {
 const InventoryTree = dynamic(() => import('@/components/InventoryTree'), {
   ssr: false,
   loading: () => <div className="w-full bg-[#f3f3f3] rounded-2xl flex items-center justify-center text-sm text-[#aaa]" style={{ height: 'calc(100vh - 260px)', minHeight: 400 }}>Loading tree…</div>,
+})
+const InventoryCase = dynamic(() => import('@/components/InventoryCase'), {
+  ssr: false,
+  loading: () => <div className="w-full bg-[#f3f3f3] rounded-2xl flex items-center justify-center text-sm text-[#aaa]" style={{ height: 'calc(100vh - 260px)', minHeight: 400 }}>Loading cases…</div>,
 })
 const PieceModal = dynamic(() => import('@/components/PieceModal'), { ssr: false })
 
@@ -196,13 +200,13 @@ export default function HomePage() {
           {/* View toggle */}
           <div className="flex items-center justify-between mb-3">
             <div className="flex gap-0.5 bg-[#f3f3f3] p-1 rounded-xl">
-              {(['grid', 'map', 'tree'] as ViewMode[]).map(v => (
+              {(['grid', 'map', 'tree', 'case'] as ViewMode[]).map(v => (
                 <button
                   key={v}
                   onClick={() => setViewMode(v)}
                   className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${viewMode === v ? 'bg-white text-[#111] shadow-sm' : 'text-[#6b6b6b] hover:text-[#111]'}`}
                 >
-                  {v === 'grid' ? 'Grid' : v === 'map' ? 'Map' : 'Tree'}
+                  {v === 'grid' ? 'Grid' : v === 'map' ? 'Map' : v === 'tree' ? 'Tree' : 'Cases'}
                 </button>
               ))}
             </div>
@@ -340,6 +344,11 @@ export default function HomePage() {
           {/* Tree */}
           {viewMode === 'tree' && !loading && (
             <InventoryTree items={items} onEditPiece={openEdit} />
+          )}
+
+          {/* Cases */}
+          {viewMode === 'case' && !loading && (
+            <InventoryCase items={items} onEditPiece={openEdit} />
           )}
         </main>
 
