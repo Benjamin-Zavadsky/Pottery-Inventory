@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback, useRef, useEffect } from 'react'
+import Link from 'next/link'
 import { ComposableMap, Geographies, Geography, Marker } from 'react-simple-maps'
 import { CULTURES, REGION_COLORS } from '@/lib/constants'
 import type { PotteryItem } from '@/lib/types'
@@ -255,7 +256,7 @@ export default function InventoryMap({ items, onEditPiece }: Props) {
             ) : (
               <div className="flex-1 overflow-y-auto py-3 px-4 flex flex-col gap-2.5">
                 {drawer.pieces.map(piece => (
-                  <div key={piece.id} className="flex items-center gap-3 bg-[#fafafa] border border-[#f0f0f0] rounded-xl p-3 hover:border-[#e0e0e0] transition-colors">
+                  <Link key={piece.id} href={`/item/${piece.id}`} onClick={() => setDrawer(null)} className="flex items-center gap-3 bg-[#fafafa] border border-[#f0f0f0] rounded-xl p-3 hover:border-[#e0e0e0] hover:bg-white transition-colors">
                     <div className="w-11 h-11 rounded-lg bg-[#f0f0f0] overflow-hidden shrink-0">
                       {piece.photos?.[0]
                         // eslint-disable-next-line @next/next/no-img-element
@@ -268,8 +269,8 @@ export default function InventoryMap({ items, onEditPiece }: Props) {
                       <p className="text-[11px] text-[#bbb] font-mono mt-0.5">{piece.sku}</p>
                       {piece.age && <p className="text-[11px] text-[#999] truncate mt-0.5">{piece.age}</p>}
                     </div>
-                    <button onClick={() => { setDrawer(null); onEditPiece(piece) }} className="text-[11px] font-medium text-[#111] border border-[#e5e5e5] rounded-lg px-2.5 py-1.5 hover:bg-[#111] hover:text-white hover:border-[#111] transition-all shrink-0">Edit</button>
-                  </div>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ccc" strokeWidth="2" strokeLinecap="round" className="shrink-0"><polyline points="9 18 15 12 9 6" /></svg>
+                  </Link>
                 ))}
               </div>
             )}
