@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
-import { CULTURES } from '@/lib/constants'
+import { CULTURES, CASES } from '@/lib/constants'
 import type { PotteryItem } from '@/lib/types'
 
 const CONDITIONS = ['Mint', 'Excellent', 'Good', 'Fair', 'Poor']
@@ -24,6 +24,7 @@ export default function PieceModal({ mode, item, onClose, onSaved }: Props) {
     tribe_culture: '',
     age: '',
     condition: '',
+    case_id: '',
     imageUrl: '',
     research_notes: '',
   })
@@ -35,6 +36,7 @@ export default function PieceModal({ mode, item, onClose, onSaved }: Props) {
         tribe_culture: item.tribe_culture ?? '',
         age: item.age ?? '',
         condition: item.condition ?? '',
+        case_id: item.case_id ?? '',
         imageUrl: item.photos?.[0] ?? '',
         research_notes: item.research_notes ?? '',
       })
@@ -70,6 +72,7 @@ export default function PieceModal({ mode, item, onClose, onSaved }: Props) {
             tribe_culture: form.tribe_culture || null,
             age: form.age.trim() || 'Unknown',
             condition: CONDITIONS.includes(form.condition) ? form.condition : null,
+            case_id: form.case_id || null,
             research_notes: form.research_notes.trim() || null,
             place_of_origin,
             color: 'Unknown',
@@ -92,6 +95,7 @@ export default function PieceModal({ mode, item, onClose, onSaved }: Props) {
             tribe_culture: form.tribe_culture || null,
             age: form.age.trim() || item.age,
             condition: CONDITIONS.includes(form.condition) ? form.condition : item.condition,
+            case_id: form.case_id || null,
             research_notes: form.research_notes.trim() || null,
             photos,
           })
@@ -154,6 +158,13 @@ export default function PieceModal({ mode, item, onClose, onSaved }: Props) {
             <select value={form.condition} onChange={e => set('condition', e.target.value)} className="input-base">
               <option value="">— Unknown —</option>
               {CONDITIONS.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </Field>
+
+          <Field label="Display Case">
+            <select value={form.case_id} onChange={e => set('case_id', e.target.value)} className="input-base">
+              <option value="">— Unassigned —</option>
+              {CASES.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </Field>
 
