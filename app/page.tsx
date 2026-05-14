@@ -352,18 +352,7 @@ export default function HomePage() {
           )}
         </main>
 
-        {/* Floating + button */}
-        {user && (
-          <button
-            onClick={openAdd}
-            className="fixed bottom-24 right-4 sm:bottom-8 sm:right-6 z-20 w-14 h-14 bg-[#111] text-white rounded-full shadow-xl flex items-center justify-center text-2xl hover:bg-[#333] transition-colors"
-            aria-label="Add piece"
-          >
-            +
-          </button>
-        )}
-
-        {/* Quick add/edit modal */}
+        {/* Quick edit modal */}
         {modalOpen && (
           <PieceModal
             mode={modalMode}
