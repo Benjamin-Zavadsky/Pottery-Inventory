@@ -6,7 +6,7 @@ import { CULTURES, REGION_COLORS } from '@/lib/constants'
 import type { PotteryItem } from '@/lib/types'
 
 const GEO_URL = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json'
-const BASE_SCALE = 300
+const BASE_SCALE = 140
 const K = Math.PI / 180          // degrees → radians
 const DEG_PER_RAD = 180 / Math.PI // radians → degrees
 
@@ -38,7 +38,7 @@ function computeCss(snap: ViewState, work: ViewState, W: number, H: number): Css
 
 export default function InventoryMap({ items, onEditPiece }: Props) {
   // What the SVG is actually rendered at — only updated when interaction settles
-  const [rendered, setRendered] = useState<ViewState>({ projScale: BASE_SCALE, center: [-80, 10] })
+  const [rendered, setRendered] = useState<ViewState>({ projScale: BASE_SCALE, center: [10, 15] })
   // CSS transform layered on top for smooth live feedback
   const [css, setCss] = useState<CssTransform | null>(null)
 
@@ -48,8 +48,8 @@ export default function InventoryMap({ items, onEditPiece }: Props) {
 
   const containerRef = useRef<HTMLDivElement>(null)
   // Refs hold the authoritative live state without triggering renders
-  const snapRef = useRef<ViewState>({ projScale: BASE_SCALE, center: [-80, 10] })
-  const workRef = useRef<ViewState>({ projScale: BASE_SCALE, center: [-80, 10] })
+  const snapRef = useRef<ViewState>({ projScale: BASE_SCALE, center: [10, 15] })
+  const workRef = useRef<ViewState>({ projScale: BASE_SCALE, center: [10, 15] })
   const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const rafRef = useRef<number | null>(null)
   const dragStart = useRef<{ mx: number; my: number; lng0: number; lat0: number; dpp: number } | null>(null)

@@ -10,7 +10,10 @@ interface Props {
   onEditPiece: (item: PotteryItem) => void
 }
 
-const REGION_ORDER: Region[] = ['North America', 'Mesoamerica', 'South America', 'Caribbean / Amazonia']
+const REGION_ORDER: Region[] = [
+  'North America', 'Mesoamerica', 'South America', 'Caribbean / Amazonia',
+  'Europe', 'Africa', 'Middle East', 'South Asia', 'East Asia', 'Southeast Asia', 'Oceania',
+]
 
 function piecesForCulture(items: PotteryItem[], cultureName: string): PotteryItem[] {
   const needle = cultureName.toLowerCase()
