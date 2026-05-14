@@ -108,6 +108,110 @@ export default function InventoryMap({ items, onEditPiece }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Touch: single-finger pan + two-finger pinch-to-zoom
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+
+    let ts: {
+      t0x: number; t0y: number
+      lng0: number; lat0: number; dpp: number
+      pinchDist0?: number; scale0?: number; midX0?: number; midY0?: number
+    } | null = null
+
+    const onTouchStart = (e: TouchEvent) => {
+      const rect = el.getBoundingClientRect()
+      const t0 = e.touches[0]
+      ts = {
+        t0x: t0.clientX, t0y: t0.clientY,
+        lng0: workRef.current.center[0],
+        lat0: workRef.current.center[1],
+        dpp: DEG_PER_RAD / workRef.current.projScale,
+      }
+      if (e.touches.length >= 2) {
+        const t1 = e.touches[1]
+        ts.pinchDist0 = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY)
+        ts.scale0 = workRef.current.projScale
+        ts.midX0 = (t0.clientX + t1.clientX) / 2 - rect.left - rect.width / 2
+        ts.midY0 = (t0.clientY + t1.clientY) / 2 - rect.top - rect.height / 2
+      }
+      didDrag.current = false
+    }
+
+    const onTouchMove = (e: TouchEvent) => {
+      e.preventDefault()
+      if (!ts) return
+      const rect = el.getBoundingClientRect()
+
+      if (e.touches.length === 1 && ts.pinchDist0 == null) {
+        const t = e.touches[0]
+        const dx = t.clientX - ts.t0x
+        const dy = t.clientY - ts.t0y
+        if (Math.abs(dx) + Math.abs(dy) > 4) { didDrag.current = true; setDragging(true) }
+        workRef.current = {
+          ...workRef.current,
+          center: [
+            ts.lng0 - dx * ts.dpp,
+            Math.max(-80, Math.min(80, ts.lat0 + dy * ts.dpp)),
+          ],
+        }
+        scheduleCss()
+        scheduleSettle()
+      } else if (e.touches.length >= 2 && ts.pinchDist0 != null && ts.scale0 != null && ts.midX0 != null && ts.midY0 != null) {
+        didDrag.current = true
+        const t0 = e.touches[0]
+        const t1 = e.touches[1]
+        const dist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY)
+        const factor = dist / ts.pinchDist0
+        const newScale = Math.min(Math.max(ts.scale0 * factor, 80), 8000)
+        // Keep the geo point under the initial pinch midpoint fixed
+        const dpp0 = DEG_PER_RAD / ts.scale0
+        const midLng = ts.lng0 + ts.midX0 * dpp0
+        const midLat = ts.lat0 - ts.midY0 * dpp0
+        const curMidX = (t0.clientX + t1.clientX) / 2 - rect.left - rect.width / 2
+        const curMidY = (t0.clientY + t1.clientY) / 2 - rect.top - rect.height / 2
+        const dppNew = DEG_PER_RAD / newScale
+        workRef.current = {
+          projScale: newScale,
+          center: [
+            midLng - curMidX * dppNew,
+            Math.max(-80, Math.min(80, midLat + curMidY * dppNew)),
+          ],
+        }
+        scheduleCss()
+        scheduleSettle()
+      }
+    }
+
+    const onTouchEnd = (e: TouchEvent) => {
+      if (e.touches.length === 0) {
+        ts = null
+        setDragging(false)
+      } else if (e.touches.length === 1) {
+        // Dropped from pinch back to pan — reinitialize from current position
+        const t = e.touches[0]
+        ts = {
+          t0x: t.clientX, t0y: t.clientY,
+          lng0: workRef.current.center[0],
+          lat0: workRef.current.center[1],
+          dpp: DEG_PER_RAD / workRef.current.projScale,
+        }
+      }
+    }
+
+    el.addEventListener('touchstart', onTouchStart, { passive: true })
+    el.addEventListener('touchmove', onTouchMove, { passive: false })
+    el.addEventListener('touchend', onTouchEnd)
+    el.addEventListener('touchcancel', onTouchEnd)
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart)
+      el.removeEventListener('touchmove', onTouchMove)
+      el.removeEventListener('touchend', onTouchEnd)
+      el.removeEventListener('touchcancel', onTouchEnd)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // +/- buttons → commit immediately (no interaction in progress)
   function zoomBy(factor: number) {
     workRef.current = { ...workRef.current, projScale: Math.min(Math.max(workRef.current.projScale * factor, 80), 8000) }
@@ -212,9 +316,9 @@ export default function InventoryMap({ items, onEditPiece }: Props) {
       </div>
 
       {/* Zoom controls */}
-      <div className="absolute top-4 right-4 flex flex-col gap-1 z-10">
-        <button onMouseDown={e => e.stopPropagation()} onClick={() => zoomBy(1.5)} className="w-9 h-9 bg-white rounded-xl shadow-sm border border-[#e5e5e5] flex items-center justify-center text-[#333] hover:border-[#aaa] transition-colors text-lg font-light">+</button>
-        <button onMouseDown={e => e.stopPropagation()} onClick={() => zoomBy(1 / 1.5)} className="w-9 h-9 bg-white rounded-xl shadow-sm border border-[#e5e5e5] flex items-center justify-center text-[#333] hover:border-[#aaa] transition-colors text-lg font-light">−</button>
+      <div className="absolute top-4 right-4 flex flex-col gap-1 z-10" onMouseDown={e => e.stopPropagation()} onTouchStart={e => e.stopPropagation()}>
+        <button onClick={() => zoomBy(1.5)} className="w-9 h-9 bg-white rounded-xl shadow-sm border border-[#e5e5e5] flex items-center justify-center text-[#333] hover:border-[#aaa] transition-colors text-lg font-light">+</button>
+        <button onClick={() => zoomBy(1 / 1.5)} className="w-9 h-9 bg-white rounded-xl shadow-sm border border-[#e5e5e5] flex items-center justify-center text-[#333] hover:border-[#aaa] transition-colors text-lg font-light">−</button>
       </div>
 
       {/* Tooltip */}
