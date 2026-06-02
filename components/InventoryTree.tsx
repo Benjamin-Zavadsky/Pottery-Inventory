@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+import Link from 'next/link'
 import { CULTURES, REGION_COLORS } from '@/lib/constants'
 import type { PotteryItem } from '@/lib/types'
 import type { Region } from '@/lib/constants'
@@ -120,9 +121,9 @@ export default function InventoryTree({ items, onEditPiece }: Props) {
                           <div className="pl-9 pr-5 pb-4 pt-1 overflow-x-auto">
                             <div className="flex gap-3" style={{ width: 'max-content' }}>
                               {pieces.map(piece => (
-                                <button
+                                <Link
                                   key={piece.id}
-                                  onClick={() => onEditPiece(piece)}
+                                  href={`/item/${piece.id}`}
                                   className="flex flex-col items-start w-[100px] shrink-0 group"
                                 >
                                   {/* Photo */}
@@ -154,7 +155,7 @@ export default function InventoryTree({ items, onEditPiece }: Props) {
                                   {piece.condition && (
                                     <p className="text-[10px] text-[#999] mt-0.5">{piece.condition}</p>
                                   )}
-                                </button>
+                                </Link>
                               ))}
                             </div>
                           </div>
