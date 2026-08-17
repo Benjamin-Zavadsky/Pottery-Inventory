@@ -8,14 +8,14 @@ Read this file in full before touching any case-related code or schema.
 These are the only valid case locations. They must be used exactly as written —
 no abbreviations, no free text, no alternatives.
 
-| ID | Official Name | Description |
-|----|---------------|-------------|
-| A | A — Left Tower | Tall case on the far left wall |
-| B | B — Center Left | Long low case, center left (approx. 2ft deep) |
-| C | C — Center Right | Long low case, center right (approx. 2ft deep) |
-| D | D — Right Tower | Tall case on the far right wall |
-| B-top | B — Center Left, Top Surface | Pieces displayed on top of Case B |
-| C-top | C — Center Right, Top Surface | Pieces displayed on top of Case C |
+| ID    | Official Name                 | Description                                    |
+| ----- | ----------------------------- | ---------------------------------------------- |
+| A     | A — Left Tower                | Tall case on the far left wall                 |
+| B     | B — Center Left               | Long low case, center left (approx. 2ft deep)  |
+| C     | C — Center Right              | Long low case, center right (approx. 2ft deep) |
+| D     | D — Right Tower               | Tall case on the far right wall                |
+| B-top | B — Center Left, Top Surface  | Pieces displayed on top of Case B              |
+| C-top | C — Center Right, Top Surface | Pieces displayed on top of Case C              |
 
 New locations must be approved by the owner before being added. Do not invent
 location names — always reference this list.
@@ -91,6 +91,7 @@ alter table pottery add column case_id text references cases(id);
 ## Case Management Page
 
 When building `app/cases/page.tsx`:
+
 - Show all six cases with current piece count
 - Show last inventoried date per case
 - Allow clicking into a case to see all pieces currently assigned to it

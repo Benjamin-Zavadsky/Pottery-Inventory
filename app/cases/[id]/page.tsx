@@ -1,28 +1,28 @@
-'use client'
+'use client';
 
-import { useEffect, useState, useMemo } from 'react'
-import { useParams } from 'next/navigation'
-import Link from 'next/link'
-import { createClient } from '@/lib/supabase'
-import { CASES } from '@/lib/constants'
-import type { PotteryItem, Case } from '@/lib/types'
-import type { User } from '@supabase/supabase-js'
+import { useEffect, useState, useMemo } from 'react';
+import { useParams } from 'next/navigation';
+import Link from 'next/link';
+import { createClient } from '@/lib/supabase';
+import { CASES } from '@/lib/constants';
+import type { PotteryItem, Case } from '@/lib/types';
+import type { User } from '@supabase/supabase-js';
 
 export default function CaseDetailPage() {
-  const { id } = useParams<{ id: string }>()
-  const supabase = useMemo(() => createClient(), [])
+  const { id } = useParams<{ id: string }>();
+  const supabase = useMemo(() => createClient(), []);
 
-  const [caseData, setCaseData] = useState<Case | null>(null)
-  const [pieces, setPieces] = useState<PotteryItem[]>([])
-  const [loading, setLoading] = useState(true)
-  const [marking, setMarking] = useState(false)
-  const [user, setUser] = useState<User | null>(null)
+  const [caseData, setCaseData] = useState<Case | null>(null);
+  const [pieces, setPieces] = useState<PotteryItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [marking, setMarking] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
 
-  const caseMeta = CASES.find((c) => c.id === id)
+  const caseMeta = CASES.find((c) => c.id === id);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setUser(data.user))
-  }, [supabase])
+    supabase.auth.getUser().then(({ data }) => setUser(data.user));
+  }, [supabase]);
 
   useEffect(() => {
     async function load() {
@@ -34,31 +34,46 @@ export default function CaseDetailPage() {
           .eq('case_id', id)
           .eq('status', 'Active')
           .order('created_at', { ascending: false }),
-      ])
-      setCaseData(caseRow)
-      setPieces(potteryRows ?? [])
-      setLoading(false)
+      ]);
+      setCaseData(caseRow);
+      setPieces(potteryRows ?? []);
+      setLoading(false);
     }
-    load()
-  }, [id, supabase])
+    load();
+  }, [id, supabase]);
 
   async function markInventoried() {
-    setMarking(true)
-    const now = new Date().toISOString()
-    await supabase.from('cases').update({ last_inventoried_at: now }).eq('id', id)
-    setCaseData((prev) => prev ? { ...prev, last_inventoried_at: now } : prev)
-    setMarking(false)
+    setMarking(true);
+    const now = new Date().toISOString();
+    await supabase.from('cases').update({ last_inventoried_at: now }).eq('id', id);
+    setCaseData((prev) => (prev ? { ...prev, last_inventoried_at: now } : prev));
+    setMarking(false);
   }
 
-  if (loading) return (
-    <div className="min-h-screen flex items-center justify-center text-sm text-[#6b6b6b]">Loading...</div>
-  )
+  if (loading)
+    return (
+      <div className="min-h-screen flex items-center justify-center text-sm text-[#6b6b6b]">
+        Loading...
+      </div>
+    );
 
   return (
     <div className="min-h-screen flex flex-col bg-[#f9f9f9]">
       <header className="bg-white border-b border-[#e5e5e5] px-4 sm:px-6 py-3 sm:py-4 flex items-center gap-3 sticky top-0 z-10">
-        <Link href="/cases" className="text-[#6b6b6b] hover:text-[#111] transition-colors p-1 -ml-1 shrink-0">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <Link
+          href="/cases"
+          className="text-[#6b6b6b] hover:text-[#111] transition-colors p-1 -ml-1 shrink-0"
+        >
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
             <polyline points="15 18 9 12 15 6" />
           </svg>
         </Link>
@@ -87,7 +102,10 @@ export default function CaseDetailPage() {
         {pieces.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 gap-3">
             <p className="text-sm text-[#6b6b6b]">No pieces assigned to this case yet.</p>
-            <Link href="/add" className="text-xs bg-[#111] text-white px-4 py-2 rounded-xl hover:bg-[#333] transition-colors">
+            <Link
+              href="/add"
+              className="text-xs bg-[#111] text-white px-4 py-2 rounded-xl hover:bg-[#333] transition-colors"
+            >
               Add a piece
             </Link>
           </div>
@@ -113,14 +131,18 @@ export default function CaseDetailPage() {
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center text-[#ccc] text-xs">No photo</div>
+                      <div className="w-full h-full flex items-center justify-center text-[#ccc] text-xs">
+                        No photo
+                      </div>
                     )}
                   </div>
 
                   {/* Info */}
                   <div className="p-3">
                     <p className="text-xs font-mono text-[#aaa]">{piece.sku}</p>
-                    <p className="text-sm font-medium text-[#111] mt-0.5 leading-snug line-clamp-2">{piece.name}</p>
+                    <p className="text-sm font-medium text-[#111] mt-0.5 leading-snug line-clamp-2">
+                      {piece.name}
+                    </p>
                     {piece.condition && (
                       <p className="text-[10px] text-[#6b6b6b] mt-1">{piece.condition}</p>
                     )}
@@ -132,5 +154,5 @@ export default function CaseDetailPage() {
         )}
       </main>
     </div>
-  )
+  );
 }

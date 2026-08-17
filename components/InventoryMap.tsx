@@ -1,277 +1,335 @@
-'use client'
+'use client';
 
-import { useState, useCallback, useRef, useEffect } from 'react'
-import Link from 'next/link'
-import { ComposableMap, Geographies, Geography, Marker } from 'react-simple-maps'
-import { CULTURES, REGION_COLORS } from '@/lib/constants'
-import type { PotteryItem } from '@/lib/types'
+import { useState, useCallback, useRef, useEffect } from 'react';
+import Link from 'next/link';
+import { ComposableMap, Geographies, Geography, Marker } from 'react-simple-maps';
+import { CULTURES, REGION_COLORS } from '@/lib/constants';
+import type { PotteryItem } from '@/lib/types';
 
-const GEO_URL = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json'
-const BASE_SCALE = 140
-const K = Math.PI / 180          // degrees → radians
-const DEG_PER_RAD = 180 / Math.PI // radians → degrees
+const GEO_URL = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json';
+const BASE_SCALE = 140;
+const K = Math.PI / 180; // degrees → radians
+const DEG_PER_RAD = 180 / Math.PI; // radians → degrees
 
 interface Props {
-  items: PotteryItem[]
-  onEditPiece: (item: PotteryItem) => void
+  items: PotteryItem[];
+  onEditPiece: (item: PotteryItem) => void;
 }
 
-interface Tooltip { culture: string; count: number; x: number; y: number }
-interface ViewState { projScale: number; center: [number, number] }
-interface CssTransform { scale: number; tx: number; ty: number }
+interface Tooltip {
+  culture: string;
+  count: number;
+  x: number;
+  y: number;
+}
+interface ViewState {
+  projScale: number;
+  center: [number, number];
+}
+interface CssTransform {
+  scale: number;
+  tx: number;
+  ty: number;
+}
 
 function piecesForCulture(items: PotteryItem[], cultureName: string): PotteryItem[] {
-  const needle = cultureName.toLowerCase()
-  return items.filter(item => {
-    if (!item.tribe_culture) return false
-    const hay = item.tribe_culture.toLowerCase()
-    return hay.includes(needle) || needle.includes(hay)
-  })
+  const needle = cultureName.toLowerCase();
+  return items.filter((item) => {
+    if (!item.tribe_culture) return false;
+    const hay = item.tribe_culture.toLowerCase();
+    return hay.includes(needle) || needle.includes(hay);
+  });
 }
 
 // CSS transform that makes an SVG rendered at `snap` look like `work`
 function computeCss(snap: ViewState, work: ViewState, W: number, H: number): CssTransform {
-  const scale = work.projScale / snap.projScale
-  const tx = W / 2 * (1 - scale) - (work.center[0] - snap.center[0]) * work.projScale * K
-  const ty = H / 2 * (1 - scale) + (work.center[1] - snap.center[1]) * work.projScale * K
-  return { scale, tx, ty }
+  const scale = work.projScale / snap.projScale;
+  const tx = (W / 2) * (1 - scale) - (work.center[0] - snap.center[0]) * work.projScale * K;
+  const ty = (H / 2) * (1 - scale) + (work.center[1] - snap.center[1]) * work.projScale * K;
+  return { scale, tx, ty };
 }
 
 export default function InventoryMap({ items, onEditPiece }: Props) {
   // What the SVG is actually rendered at — only updated when interaction settles
-  const [rendered, setRendered] = useState<ViewState>({ projScale: BASE_SCALE, center: [10, 15] })
+  const [rendered, setRendered] = useState<ViewState>({ projScale: BASE_SCALE, center: [10, 15] });
   // CSS transform layered on top for smooth live feedback
-  const [css, setCss] = useState<CssTransform | null>(null)
+  const [css, setCss] = useState<CssTransform | null>(null);
 
-  const [dragging, setDragging] = useState(false)
-  const [tooltip, setTooltip] = useState<Tooltip | null>(null)
-  const [drawer, setDrawer] = useState<{ culture: string; pieces: PotteryItem[] } | null>(null)
+  const [dragging, setDragging] = useState(false);
+  const [tooltip, setTooltip] = useState<Tooltip | null>(null);
+  const [drawer, setDrawer] = useState<{ culture: string; pieces: PotteryItem[] } | null>(null);
 
-  const containerRef = useRef<HTMLDivElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null);
   // Refs hold the authoritative live state without triggering renders
-  const snapRef = useRef<ViewState>({ projScale: BASE_SCALE, center: [10, 15] })
-  const workRef = useRef<ViewState>({ projScale: BASE_SCALE, center: [10, 15] })
-  const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const rafRef = useRef<number | null>(null)
-  const dragStart = useRef<{ mx: number; my: number; lng0: number; lat0: number; dpp: number } | null>(null)
-  const didDrag = useRef(false)
+  const snapRef = useRef<ViewState>({ projScale: BASE_SCALE, center: [10, 15] });
+  const workRef = useRef<ViewState>({ projScale: BASE_SCALE, center: [10, 15] });
+  const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const dragStart = useRef<{
+    mx: number;
+    my: number;
+    lng0: number;
+    lat0: number;
+    dpp: number;
+  } | null>(null);
+  const didDrag = useRef(false);
 
   // Commit working state → re-render SVG at full cartographic quality, drop CSS transform
   const commit = useCallback(() => {
-    const snap: ViewState = { projScale: workRef.current.projScale, center: [...workRef.current.center] as [number, number] }
-    snapRef.current = snap
-    setRendered(snap)
-    setCss(null)
-  }, [])
+    const snap: ViewState = {
+      projScale: workRef.current.projScale,
+      center: [...workRef.current.center] as [number, number],
+    };
+    snapRef.current = snap;
+    setRendered(snap);
+    setCss(null);
+  }, []);
 
   // Schedule a CSS update on the next animation frame (throttles React renders to ≤60fps)
   function scheduleCss() {
-    if (rafRef.current !== null) return
+    if (rafRef.current !== null) return;
     rafRef.current = requestAnimationFrame(() => {
-      rafRef.current = null
-      const el = containerRef.current
-      if (!el) return
-      setCss(computeCss(snapRef.current, workRef.current, el.clientWidth, el.clientHeight))
-    })
+      rafRef.current = null;
+      const el = containerRef.current;
+      if (!el) return;
+      setCss(computeCss(snapRef.current, workRef.current, el.clientWidth, el.clientHeight));
+    });
   }
 
   function scheduleSettle() {
-    if (settleTimer.current) clearTimeout(settleTimer.current)
-    settleTimer.current = setTimeout(commit, 200)
+    if (settleTimer.current) clearTimeout(settleTimer.current);
+    settleTimer.current = setTimeout(commit, 200);
   }
 
   // Block document-level scroll/bounce while any touch is inside the map
   useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
+    const el = containerRef.current;
+    if (!el) return;
     const prevent = (e: TouchEvent) => {
-      if (el.contains(e.target as Node)) e.preventDefault()
-    }
-    document.addEventListener('touchmove', prevent, { passive: false })
-    return () => document.removeEventListener('touchmove', prevent)
-  }, [])
+      if (el.contains(e.target as Node)) e.preventDefault();
+    };
+    document.addEventListener('touchmove', prevent, { passive: false });
+    return () => document.removeEventListener('touchmove', prevent);
+  }, []);
 
   // Wheel / trackpad pinch → zoom toward cursor
   useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
+    const el = containerRef.current;
+    if (!el) return;
     const onWheel = (e: WheelEvent) => {
-      e.preventDefault()
-      const rect = el.getBoundingClientRect()
-      const dx = e.clientX - rect.left - rect.width / 2
-      const dy = e.clientY - rect.top - rect.height / 2
-      const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12
-      const prev = workRef.current.projScale
-      const newScale = Math.min(Math.max(prev * factor, 80), 8000)
-      const dpp = DEG_PER_RAD / prev
+      e.preventDefault();
+      const rect = el.getBoundingClientRect();
+      const dx = e.clientX - rect.left - rect.width / 2;
+      const dy = e.clientY - rect.top - rect.height / 2;
+      const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+      const prev = workRef.current.projScale;
+      const newScale = Math.min(Math.max(prev * factor, 80), 8000);
+      const dpp = DEG_PER_RAD / prev;
       workRef.current = {
         projScale: newScale,
         center: [
           workRef.current.center[0] + dx * dpp * (1 - 1 / factor),
           Math.max(-80, Math.min(80, workRef.current.center[1] - dy * dpp * (1 - 1 / factor))),
         ],
-      }
-      scheduleCss()
-      scheduleSettle()
-    }
-    el.addEventListener('wheel', onWheel, { passive: false })
-    return () => el.removeEventListener('wheel', onWheel)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+      };
+      scheduleCss();
+      scheduleSettle();
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Touch: single-finger pan + two-finger pinch-to-zoom
   useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
+    const el = containerRef.current;
+    if (!el) return;
 
     let ts: {
-      t0x: number; t0y: number
-      lng0: number; lat0: number; dpp: number
-      pinchDist0?: number; scale0?: number; midX0?: number; midY0?: number
-    } | null = null
+      t0x: number;
+      t0y: number;
+      lng0: number;
+      lat0: number;
+      dpp: number;
+      pinchDist0?: number;
+      scale0?: number;
+      midX0?: number;
+      midY0?: number;
+    } | null = null;
 
     const onTouchStart = (e: TouchEvent) => {
-      if (e.touches.length >= 2) e.preventDefault()
-      const rect = el.getBoundingClientRect()
-      const t0 = e.touches[0]
+      if (e.touches.length >= 2) e.preventDefault();
+      const rect = el.getBoundingClientRect();
+      const t0 = e.touches[0];
       ts = {
-        t0x: t0.clientX, t0y: t0.clientY,
+        t0x: t0.clientX,
+        t0y: t0.clientY,
         lng0: workRef.current.center[0],
         lat0: workRef.current.center[1],
         dpp: DEG_PER_RAD / workRef.current.projScale,
-      }
+      };
       if (e.touches.length >= 2) {
-        const t1 = e.touches[1]
-        ts.pinchDist0 = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY)
-        ts.scale0 = workRef.current.projScale
-        ts.midX0 = (t0.clientX + t1.clientX) / 2 - rect.left - rect.width / 2
-        ts.midY0 = (t0.clientY + t1.clientY) / 2 - rect.top - rect.height / 2
+        const t1 = e.touches[1];
+        ts.pinchDist0 = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+        ts.scale0 = workRef.current.projScale;
+        ts.midX0 = (t0.clientX + t1.clientX) / 2 - rect.left - rect.width / 2;
+        ts.midY0 = (t0.clientY + t1.clientY) / 2 - rect.top - rect.height / 2;
       }
-      didDrag.current = false
-    }
+      didDrag.current = false;
+    };
 
     const onTouchMove = (e: TouchEvent) => {
-      e.preventDefault()
-      if (!ts) return
-      const rect = el.getBoundingClientRect()
+      e.preventDefault();
+      if (!ts) return;
+      const rect = el.getBoundingClientRect();
 
       if (e.touches.length === 1 && ts.pinchDist0 == null) {
-        const t = e.touches[0]
-        const dx = t.clientX - ts.t0x
-        const dy = t.clientY - ts.t0y
-        if (Math.abs(dx) + Math.abs(dy) > 4) { didDrag.current = true; setDragging(true) }
+        const t = e.touches[0];
+        const dx = t.clientX - ts.t0x;
+        const dy = t.clientY - ts.t0y;
+        if (Math.abs(dx) + Math.abs(dy) > 4) {
+          didDrag.current = true;
+          setDragging(true);
+        }
         workRef.current = {
           ...workRef.current,
-          center: [
-            ts.lng0 - dx * ts.dpp,
-            Math.max(-80, Math.min(80, ts.lat0 + dy * ts.dpp)),
-          ],
-        }
-        scheduleCss()
-        scheduleSettle()
-      } else if (e.touches.length >= 2 && ts.pinchDist0 != null && ts.scale0 != null && ts.midX0 != null && ts.midY0 != null) {
-        didDrag.current = true
-        const t0 = e.touches[0]
-        const t1 = e.touches[1]
-        const dist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY)
-        const factor = dist / ts.pinchDist0
-        const newScale = Math.min(Math.max(ts.scale0 * factor, 80), 8000)
+          center: [ts.lng0 - dx * ts.dpp, Math.max(-80, Math.min(80, ts.lat0 + dy * ts.dpp))],
+        };
+        scheduleCss();
+        scheduleSettle();
+      } else if (
+        e.touches.length >= 2 &&
+        ts.pinchDist0 != null &&
+        ts.scale0 != null &&
+        ts.midX0 != null &&
+        ts.midY0 != null
+      ) {
+        didDrag.current = true;
+        const t0 = e.touches[0];
+        const t1 = e.touches[1];
+        const dist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+        const factor = dist / ts.pinchDist0;
+        const newScale = Math.min(Math.max(ts.scale0 * factor, 80), 8000);
         // Keep the geo point under the initial pinch midpoint fixed
-        const dpp0 = DEG_PER_RAD / ts.scale0
-        const midLng = ts.lng0 + ts.midX0 * dpp0
-        const midLat = ts.lat0 - ts.midY0 * dpp0
-        const curMidX = (t0.clientX + t1.clientX) / 2 - rect.left - rect.width / 2
-        const curMidY = (t0.clientY + t1.clientY) / 2 - rect.top - rect.height / 2
-        const dppNew = DEG_PER_RAD / newScale
+        const dpp0 = DEG_PER_RAD / ts.scale0;
+        const midLng = ts.lng0 + ts.midX0 * dpp0;
+        const midLat = ts.lat0 - ts.midY0 * dpp0;
+        const curMidX = (t0.clientX + t1.clientX) / 2 - rect.left - rect.width / 2;
+        const curMidY = (t0.clientY + t1.clientY) / 2 - rect.top - rect.height / 2;
+        const dppNew = DEG_PER_RAD / newScale;
         workRef.current = {
           projScale: newScale,
           center: [
             midLng - curMidX * dppNew,
             Math.max(-80, Math.min(80, midLat + curMidY * dppNew)),
           ],
-        }
-        scheduleCss()
-        scheduleSettle()
+        };
+        scheduleCss();
+        scheduleSettle();
       }
-    }
+    };
 
     const onTouchEnd = (e: TouchEvent) => {
       if (e.touches.length === 0) {
-        ts = null
-        setDragging(false)
+        ts = null;
+        setDragging(false);
       } else if (e.touches.length === 1) {
         // Dropped from pinch back to pan — reinitialize from current position
-        const t = e.touches[0]
+        const t = e.touches[0];
         ts = {
-          t0x: t.clientX, t0y: t.clientY,
+          t0x: t.clientX,
+          t0y: t.clientY,
           lng0: workRef.current.center[0],
           lat0: workRef.current.center[1],
           dpp: DEG_PER_RAD / workRef.current.projScale,
-        }
+        };
       }
-    }
+    };
 
-    el.addEventListener('touchstart', onTouchStart, { passive: false })
-    el.addEventListener('touchmove', onTouchMove, { passive: false })
-    el.addEventListener('touchend', onTouchEnd)
-    el.addEventListener('touchcancel', onTouchEnd)
+    el.addEventListener('touchstart', onTouchStart, { passive: false });
+    el.addEventListener('touchmove', onTouchMove, { passive: false });
+    el.addEventListener('touchend', onTouchEnd);
+    el.addEventListener('touchcancel', onTouchEnd);
     return () => {
-      el.removeEventListener('touchstart', onTouchStart)
-      el.removeEventListener('touchmove', onTouchMove)
-      el.removeEventListener('touchend', onTouchEnd)
-      el.removeEventListener('touchcancel', onTouchEnd)
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+      el.removeEventListener('touchstart', onTouchStart);
+      el.removeEventListener('touchmove', onTouchMove);
+      el.removeEventListener('touchend', onTouchEnd);
+      el.removeEventListener('touchcancel', onTouchEnd);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // +/- buttons → commit immediately (no interaction in progress)
   function zoomBy(factor: number) {
-    workRef.current = { ...workRef.current, projScale: Math.min(Math.max(workRef.current.projScale * factor, 80), 8000) }
-    commit()
+    workRef.current = {
+      ...workRef.current,
+      projScale: Math.min(Math.max(workRef.current.projScale * factor, 80), 8000),
+    };
+    commit();
   }
 
   // Drag to pan
   function onMouseDown(e: React.MouseEvent) {
     dragStart.current = {
-      mx: e.clientX, my: e.clientY,
-      lng0: workRef.current.center[0], lat0: workRef.current.center[1],
+      mx: e.clientX,
+      my: e.clientY,
+      lng0: workRef.current.center[0],
+      lat0: workRef.current.center[1],
       dpp: DEG_PER_RAD / workRef.current.projScale,
-    }
-    didDrag.current = false
+    };
+    didDrag.current = false;
   }
 
   function onMouseMove(e: React.MouseEvent) {
-    if (!dragStart.current) return
-    const dx = e.clientX - dragStart.current.mx
-    const dy = e.clientY - dragStart.current.my
-    if (Math.abs(dx) + Math.abs(dy) > 4) { didDrag.current = true; setDragging(true) }
+    if (!dragStart.current) return;
+    const dx = e.clientX - dragStart.current.mx;
+    const dy = e.clientY - dragStart.current.my;
+    if (Math.abs(dx) + Math.abs(dy) > 4) {
+      didDrag.current = true;
+      setDragging(true);
+    }
     workRef.current = {
       ...workRef.current,
       center: [
         dragStart.current.lng0 - dx * dragStart.current.dpp,
         Math.max(-80, Math.min(80, dragStart.current.lat0 + dy * dragStart.current.dpp)),
       ],
-    }
-    scheduleCss()
-    scheduleSettle()
+    };
+    scheduleCss();
+    scheduleSettle();
   }
 
-  function onMouseUp() { dragStart.current = null; setDragging(false) }
+  function onMouseUp() {
+    dragStart.current = null;
+    setDragging(false);
+  }
 
-  const handleMarkerClick = useCallback((cultureName: string) => {
-    if (didDrag.current) return
-    setDrawer({ culture: cultureName, pieces: piecesForCulture(items, cultureName) })
-  }, [items])
+  const handleMarkerClick = useCallback(
+    (cultureName: string) => {
+      if (didDrag.current) return;
+      setDrawer({ culture: cultureName, pieces: piecesForCulture(items, cultureName) });
+    },
+    [items],
+  );
 
   const cssStyle = css
-    ? { transform: `translate(${css.tx}px,${css.ty}px) scale(${css.scale})`, transformOrigin: '0 0' }
-    : undefined
+    ? {
+        transform: `translate(${css.tx}px,${css.ty}px) scale(${css.scale})`,
+        transformOrigin: '0 0',
+      }
+    : undefined;
 
   return (
     <div
       ref={containerRef}
       className="relative w-full rounded-2xl overflow-hidden select-none"
-      style={{ height: 'calc(100vh - 260px)', minHeight: 400, background: '#eef2f7', cursor: dragging ? 'grabbing' : 'grab', touchAction: 'none' }}
+      style={{
+        height: 'calc(100vh - 260px)',
+        minHeight: 400,
+        background: '#eef2f7',
+        cursor: dragging ? 'grabbing' : 'grab',
+        touchAction: 'none',
+      }}
       onMouseDown={onMouseDown}
       onMouseMove={onMouseMove}
       onMouseUp={onMouseUp}
@@ -286,66 +344,104 @@ export default function InventoryMap({ items, onEditPiece }: Props) {
         >
           <Geographies geography={GEO_URL}>
             {({ geographies }) =>
-              geographies.map(geo => (
+              geographies.map((geo) => (
                 <Geography
                   key={geo.rsmKey}
                   geography={geo}
                   fill="#f5f1ea"
                   stroke="#ddd5c8"
                   strokeWidth={0.4}
-                  style={{ default: { outline: 'none' }, hover: { outline: 'none' }, pressed: { outline: 'none' } }}
+                  style={{
+                    default: { outline: 'none' },
+                    hover: { outline: 'none' },
+                    pressed: { outline: 'none' },
+                  }}
                 />
               ))
             }
           </Geographies>
 
           {(() => {
-            const markerR = Math.min(20, Math.max(5, 8 * Math.pow(rendered.projScale / BASE_SCALE, 0.4)))
-            return CULTURES.map(c => {
-            const pieces = piecesForCulture(items, c.culture)
-            const count = pieces.length
-            const color = REGION_COLORS[c.region]
-            return (
-              <Marker key={c.culture} coordinates={[c.lng, c.lat]}>
-                <circle
-                  r={markerR}
-                  fill={color}
-                  fillOpacity={count > 0 ? 1 : 0.2}
-                  stroke="white"
-                  strokeWidth={1.5}
-                  style={{ cursor: dragging ? 'grabbing' : 'pointer' }}
-                  onMouseEnter={e => setTooltip({ culture: c.culture, count, x: e.clientX, y: e.clientY })}
-                  onMouseLeave={() => setTooltip(null)}
-                  onClick={() => handleMarkerClick(c.culture)}
-                />
-                {count > 0 && (
-                  <text textAnchor="middle" dy="0.35em" fontSize={markerR * 0.85} fontWeight="700" fill="white" style={{ pointerEvents: 'none', userSelect: 'none' }}>
-                    {count}
-                  </text>
-                )}
-              </Marker>
-            )
-          })
+            const markerR = Math.min(
+              20,
+              Math.max(5, 8 * Math.pow(rendered.projScale / BASE_SCALE, 0.4)),
+            );
+            return CULTURES.map((c) => {
+              const pieces = piecesForCulture(items, c.culture);
+              const count = pieces.length;
+              const color = REGION_COLORS[c.region];
+              return (
+                <Marker key={c.culture} coordinates={[c.lng, c.lat]}>
+                  <circle
+                    r={markerR}
+                    fill={color}
+                    fillOpacity={count > 0 ? 1 : 0.2}
+                    stroke="white"
+                    strokeWidth={1.5}
+                    style={{ cursor: dragging ? 'grabbing' : 'pointer' }}
+                    onMouseEnter={(e) =>
+                      setTooltip({ culture: c.culture, count, x: e.clientX, y: e.clientY })
+                    }
+                    onMouseLeave={() => setTooltip(null)}
+                    onClick={() => handleMarkerClick(c.culture)}
+                  />
+                  {count > 0 && (
+                    <text
+                      textAnchor="middle"
+                      dy="0.35em"
+                      fontSize={markerR * 0.85}
+                      fontWeight="700"
+                      fill="white"
+                      style={{ pointerEvents: 'none', userSelect: 'none' }}
+                    >
+                      {count}
+                    </text>
+                  )}
+                </Marker>
+              );
+            });
           })()}
         </ComposableMap>
       </div>
 
       {/* Zoom controls */}
-      <div className="absolute top-4 right-4 flex flex-col gap-1 z-10" onMouseDown={e => e.stopPropagation()} onTouchStart={e => e.stopPropagation()}>
-        <button onClick={() => zoomBy(1.5)} className="w-9 h-9 bg-white rounded-xl shadow-sm border border-[#e5e5e5] flex items-center justify-center text-[#333] hover:border-[#aaa] transition-colors text-lg font-light">+</button>
-        <button onClick={() => zoomBy(1 / 1.5)} className="w-9 h-9 bg-white rounded-xl shadow-sm border border-[#e5e5e5] flex items-center justify-center text-[#333] hover:border-[#aaa] transition-colors text-lg font-light">−</button>
+      <div
+        className="absolute top-4 right-4 flex flex-col gap-1 z-10"
+        onMouseDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+      >
+        <button
+          onClick={() => zoomBy(1.5)}
+          className="w-9 h-9 bg-white rounded-xl shadow-sm border border-[#e5e5e5] flex items-center justify-center text-[#333] hover:border-[#aaa] transition-colors text-lg font-light"
+        >
+          +
+        </button>
+        <button
+          onClick={() => zoomBy(1 / 1.5)}
+          className="w-9 h-9 bg-white rounded-xl shadow-sm border border-[#e5e5e5] flex items-center justify-center text-[#333] hover:border-[#aaa] transition-colors text-lg font-light"
+        >
+          −
+        </button>
       </div>
 
       {/* Tooltip */}
       {tooltip && !dragging && (
-        <div className="fixed z-50 bg-[#18181b] text-white text-xs rounded-lg px-3 py-1.5 pointer-events-none whitespace-nowrap shadow-lg font-medium" style={{ left: tooltip.x + 14, top: tooltip.y - 10 }}>
+        <div
+          className="fixed z-50 bg-[#18181b] text-white text-xs rounded-lg px-3 py-1.5 pointer-events-none whitespace-nowrap shadow-lg font-medium"
+          style={{ left: tooltip.x + 14, top: tooltip.y - 10 }}
+        >
           {tooltip.culture}
-          <span className="text-[#888] font-normal ml-1.5">· {tooltip.count} {tooltip.count === 1 ? 'piece' : 'pieces'}</span>
+          <span className="text-[#888] font-normal ml-1.5">
+            · {tooltip.count} {tooltip.count === 1 ? 'piece' : 'pieces'}
+          </span>
         </div>
       )}
 
       {/* Legend */}
-      <div className="absolute bottom-4 left-4 bg-white/95 backdrop-blur rounded-xl px-3.5 py-3 flex flex-col gap-2 shadow-sm border border-[#e5e5e5] z-10" onMouseDown={e => e.stopPropagation()}>
+      <div
+        className="absolute bottom-4 left-4 bg-white/95 backdrop-blur rounded-xl px-3.5 py-3 flex flex-col gap-2 shadow-sm border border-[#e5e5e5] z-10"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
         {(Object.entries(REGION_COLORS) as [string, string][]).map(([region, color]) => (
           <div key={region} className="flex items-center gap-2.5">
             <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
@@ -357,15 +453,35 @@ export default function InventoryMap({ items, onEditPiece }: Props) {
       {/* Right drawer */}
       {drawer && (
         <>
-          <div className="fixed inset-0 z-30" onMouseDown={e => e.stopPropagation()} onClick={() => setDrawer(null)} />
+          <div
+            className="fixed inset-0 z-30"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={() => setDrawer(null)}
+          />
           <div className="fixed right-0 top-0 h-full w-80 bg-white shadow-2xl z-40 flex flex-col border-l border-[#f0f0f0]">
             <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-[#f0f0f0]">
               <div>
                 <h3 className="text-sm font-semibold text-[#111]">{drawer.culture}</h3>
-                <p className="text-xs text-[#999] mt-0.5">{drawer.pieces.length} {drawer.pieces.length === 1 ? 'piece' : 'pieces'}</p>
+                <p className="text-xs text-[#999] mt-0.5">
+                  {drawer.pieces.length} {drawer.pieces.length === 1 ? 'piece' : 'pieces'}
+                </p>
               </div>
-              <button onClick={() => setDrawer(null)} className="w-8 h-8 flex items-center justify-center rounded-full bg-[#f5f5f5] text-[#666] hover:bg-[#ebebeb] transition-colors">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+              <button
+                onClick={() => setDrawer(null)}
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-[#f5f5f5] text-[#666] hover:bg-[#ebebeb] transition-colors"
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                >
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
               </button>
             </div>
             {drawer.pieces.length === 0 ? (
@@ -374,21 +490,57 @@ export default function InventoryMap({ items, onEditPiece }: Props) {
               </div>
             ) : (
               <div className="flex-1 overflow-y-auto py-3 px-4 flex flex-col gap-2.5">
-                {drawer.pieces.map(piece => (
-                  <Link key={piece.id} href={`/item/${piece.id}`} onClick={() => setDrawer(null)} className="flex items-center gap-3 bg-[#fafafa] border border-[#f0f0f0] rounded-xl p-3 hover:border-[#e0e0e0] hover:bg-white transition-colors">
+                {drawer.pieces.map((piece) => (
+                  <Link
+                    key={piece.id}
+                    href={`/item/${piece.id}`}
+                    onClick={() => setDrawer(null)}
+                    className="flex items-center gap-3 bg-[#fafafa] border border-[#f0f0f0] rounded-xl p-3 hover:border-[#e0e0e0] hover:bg-white transition-colors"
+                  >
                     <div className="w-11 h-11 rounded-lg bg-[#f0f0f0] overflow-hidden shrink-0">
-                      {piece.photos?.[0]
+                      {piece.photos?.[0] ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        ? <img src={piece.photos[0]} alt={piece.name} className="w-full h-full object-cover" />
-                        : <div className="w-full h-full flex items-center justify-center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ccc" strokeWidth="1.5"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></svg></div>
-                      }
+                        <img
+                          src={piece.photos[0]}
+                          alt={piece.name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <svg
+                            width="14"
+                            height="14"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="#ccc"
+                            strokeWidth="1.5"
+                          >
+                            <rect x="3" y="3" width="18" height="18" rx="2" />
+                            <circle cx="8.5" cy="8.5" r="1.5" />
+                            <polyline points="21 15 16 10 5 21" />
+                          </svg>
+                        </div>
+                      )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium text-[#111] truncate">{piece.name}</p>
                       <p className="text-[11px] text-[#bbb] font-mono mt-0.5">{piece.sku}</p>
-                      {piece.age && <p className="text-[11px] text-[#999] truncate mt-0.5">{piece.age}</p>}
+                      {piece.age && (
+                        <p className="text-[11px] text-[#999] truncate mt-0.5">{piece.age}</p>
+                      )}
                     </div>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ccc" strokeWidth="2" strokeLinecap="round" className="shrink-0"><polyline points="9 18 15 12 9 6" /></svg>
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="#ccc"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      className="shrink-0"
+                    >
+                      <polyline points="9 18 15 12 9 6" />
+                    </svg>
                   </Link>
                 ))}
               </div>
@@ -397,5 +549,5 @@ export default function InventoryMap({ items, onEditPiece }: Props) {
         </>
       )}
     </div>
-  )
+  );
 }

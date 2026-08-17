@@ -9,6 +9,25 @@ export default defineConfig({
     setupFiles: ['./vitest.setup.ts'],
     globals: true,
     include: ['__tests__/unit/**/*.test.ts', '__tests__/components/**/*.test.tsx'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'html'],
+      include: ['app/**/*.{ts,tsx}', 'components/**/*.{ts,tsx}', 'lib/**/*.{ts,tsx}'],
+      exclude: [
+        'app/layout.tsx',
+        'app/**/favicon.ico',
+        'lib/types.ts',
+        '**/*.config.*',
+        '**/__tests__/**',
+        '.next/**',
+      ],
+      thresholds: {
+        statements: 90,
+        branches: 90,
+        functions: 90,
+        lines: 90,
+      },
+    },
   },
   resolve: {
     alias: {

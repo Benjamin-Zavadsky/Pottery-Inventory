@@ -20,13 +20,11 @@ Pottery Inventory is a professional collection management system for a family-ow
 
 **AI:** Anthropic Claude API, model `claude-opus-4-7`, multi-image vision. Images must be resized to max 1568px via canvas before base64 encoding — raw mobile photos exceed Vercel's 4.5MB serverless payload limit. The AI analysis route is always mocked in tests — never make real Anthropic API calls from the test suite.
 
-**Deployment:** Vercel, auto-deploys from `main` branch. Environment variables set in Vercel Dashboard.
+**Deployment:** Vercel. Auto-deploy-on-push is disabled (`vercel.json` → `git.deploymentEnabled.main: false`) — production deploys are a deliberate `npm run deploy` (runs the full gate, then `vercel --prod`). Environment variables set in Vercel Dashboard. Any change touching `app/api/**` gets a preview deploy (`vercel`) and endpoint smoke-test (confirm expected non-500s, including a wrong-method 405-type check) before promoting to production — the test suite catches logic bugs, not deploy-environment failures like import-time crashes or bundling gaps.
 
-**Testing:** Vitest + React Testing Library for unit and component tests. Playwright for E2E tests. The Anthropic API is mocked in all test contexts. Pre-commit runs lint + typecheck. Pre-push runs unit and component tests. GitHub Actions CI runs the full suite including E2E on every push to `main`.
+**Testing:** Vitest + React Testing Library for unit and component tests. Playwright for E2E tests. The Anthropic API is mocked in all test contexts. Coverage thresholds are enforced at 90% (statements/branches/functions/lines) over owned code — see `vitest.config.ts` for the include/exclude scope. Both pre-commit and pre-push run the full gate (`npm run verify` = typecheck + lint + format:check + coverage + e2e). GitHub Actions CI runs the same gate on every push/PR to `main` — see `.github/workflows/ci.yml`. Local git hooks live in `scripts/git-hooks/` and are installed into `.git/hooks/` automatically by `npm install` (via the `prepare` script) since `.git/hooks/` itself isn't version-controlled.
 
 **Planned — Case & Location Tracking:** A `cases` table, a `location_history` table, and a case management view are planned. The 6 official case locations are: A — Left Tower, B — Center Left, C — Center Right, D — Right Tower, B — Center Left Top Surface, C — Center Right Top Surface. Do not build location features using free-text — always reference the cases table.
-
-**No test framework is currently installed.**
 
 ## Folder Structure
 
@@ -66,6 +64,7 @@ supabase-schema.sql           # Canonical DB schema — source of truth for all 
 ```
 
 **Rules:**
+
 - New shared components go in `components/` only if used in 2 or more places
 - New API routes go in `app/api/` following the Next.js App Router convention
 - New shared types go in `lib/types.ts`
@@ -82,10 +81,12 @@ Always resize images to a maximum of 1568px on the longest side at 85% JPEG qual
 
 **Error handling**
 Supabase errors are plain objects — not `instanceof Error`. Always extract messages with:
+
 ```ts
-const msg = err instanceof Error
-  ? err.message
-  : (err as { message?: string })?.message ?? 'Something went wrong'
+const msg =
+  err instanceof Error
+    ? err.message
+    : ((err as { message?: string })?.message ?? 'Something went wrong');
 ```
 
 **Database inserts**
@@ -93,8 +94,9 @@ Every key in a Supabase `.insert()` or `.update()` call must exist as a column i
 
 **Constrained fields**
 `condition`, `rarity`, and `originality` have Postgres CHECK constraints. Always validate against the allowed list before inserting:
+
 ```ts
-condition: CONDITIONS.includes(form.condition) ? form.condition : null
+condition: CONDITIONS.includes(form.condition) ? form.condition : null;
 ```
 
 **Imports**
@@ -113,6 +115,7 @@ Strict mode is enabled. No `any` types. Use `unknown` and narrow explicitly.
 Write no comments by default. Only add one when the WHY is non-obvious. Never describe what the code does.
 
 **Naming conventions**
+
 - Database columns and table names → `snake_case`
 - TypeScript types, interfaces, and React components → `PascalCase`
 - Functions and variables → `camelCase`
@@ -149,30 +152,41 @@ All API routes must return `{ error: string }` on failure with an appropriate HT
 ## Common Commands
 
 **Development**
+
 ```bash
 npm run dev          # Start local dev server at http://localhost:3000
 npm run build        # Production build — also runs TypeScript typecheck
 npm run lint         # Run ESLint across the project
 ```
 
-**Testing** *(once installed)*
+**Testing**
+
 ```bash
-npm run test         # Run unit and component tests (Vitest)
-npm run test:e2e     # Run end-to-end tests (Playwright)
-npm run typecheck    # TypeScript typecheck without building
+npm run test          # Run unit and component tests (Vitest)
+npm run test:coverage # Same, with coverage thresholds enforced (90%)
+npm run test:e2e      # Run end-to-end tests (Playwright)
+npm run typecheck     # TypeScript typecheck without building
+npm run check         # typecheck + lint + format:check + test:coverage — fast inner loop
+npm run verify        # check + test:e2e — the commit/push/CI gate
 ```
 
 **Deployment**
-Push to `main` on GitHub — Vercel auto-deploys. No manual deploy command needed.
-Monitor at: Vercel Dashboard → pottery-inventory → Deployments.
+
+```bash
+npm run deploy        # verify + vercel --prod — the only way main gets deployed
+```
+
+Push to `main` on GitHub does **not** auto-deploy (see Tech Stack → Deployment). Monitor at: Vercel Dashboard → pottery-inventory → Deployments.
 
 **Database changes**
+
 1. Update `supabase-schema.sql` first
 2. Run the new statements in Supabase Dashboard → SQL Editor
 
 Never alter the database directly without updating `supabase-schema.sql` first.
 
-**Environment setup** *(new machine or new contributor)*
+**Environment setup** _(new machine or new contributor)_
+
 ```bash
 git clone https://github.com/Benjamin-Z-web/Pottery-Inventory.git
 cd pottery-inventory
@@ -183,20 +197,23 @@ npm run dev
 
 ## Recovery Runbook
 
-| Symptom | Cause | Fix |
-|---------|-------|-----|
-| "Failed to fetch" / infinite re-render | `createClient()` outside `useMemo` | Wrap in `useMemo(() => createClient(), [])` |
-| Vercel build fails | Missing environment variables | Add all three env vars in Vercel → Settings → Environment Variables |
-| Vercel shows "Ready" but returns 404 | Deployment Protection enabled | Disable in Vercel → Settings → Deployment Protection |
-| Save fails with "Something went wrong" | Supabase error not surfaced, or unknown column inserted | Check browser console. Verify all insert fields exist in `supabase-schema.sql` |
-| Save fails with "violates check constraint" | AI returned invalid value for constrained field | Validate `condition`, `rarity`, `originality` against allowed arrays before inserting |
-| Multi-photo analysis only processes first photo | Images not resized — payload exceeds 4.5MB | Ensure canvas resize runs before base64 encoding |
-| AI analysis returns no results | Invalid model name or missing API key | Verify `ANTHROPIC_API_KEY` is set. Model must be `claude-opus-4-7` |
-| Photos not showing after upload | Storage bucket not public | Supabase → Storage → pottery-photos → Make Public |
-| "relation pottery does not exist" | Schema not run in Supabase | Run `supabase-schema.sql` in Supabase Dashboard → SQL Editor |
-| New contributor can't run the app | Environment variables not configured | Copy `.env.example` to `.env.local` and fill in values |
-| Git push rejected | Git identity not configured | Run `git config --global user.email` and `git config --global user.name` |
-| Supabase data visible but edits fail | RLS policy missing for authenticated write | Add insert/update policies to the table in `supabase-schema.sql` and run in SQL Editor |
+| Symptom                                         | Cause                                                   | Fix                                                                                    |
+| ----------------------------------------------- | ------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| "Failed to fetch" / infinite re-render          | `createClient()` outside `useMemo`                      | Wrap in `useMemo(() => createClient(), [])`                                            |
+| Vercel build fails                              | Missing environment variables                           | Add all three env vars in Vercel → Settings → Environment Variables                    |
+| Vercel shows "Ready" but returns 404            | Deployment Protection enabled                           | Disable in Vercel → Settings → Deployment Protection                                   |
+| Save fails with "Something went wrong"          | Supabase error not surfaced, or unknown column inserted | Check browser console. Verify all insert fields exist in `supabase-schema.sql`         |
+| Save fails with "violates check constraint"     | AI returned invalid value for constrained field         | Validate `condition`, `rarity`, `originality` against allowed arrays before inserting  |
+| Multi-photo analysis only processes first photo | Images not resized — payload exceeds 4.5MB              | Ensure canvas resize runs before base64 encoding                                       |
+| AI analysis returns no results                  | Invalid model name or missing API key                   | Verify `ANTHROPIC_API_KEY` is set. Model must be `claude-opus-4-7`                     |
+| Photos not showing after upload                 | Storage bucket not public                               | Supabase → Storage → pottery-photos → Make Public                                      |
+| "relation pottery does not exist"               | Schema not run in Supabase                              | Run `supabase-schema.sql` in Supabase Dashboard → SQL Editor                           |
+| New contributor can't run the app               | Environment variables not configured                    | Copy `.env.example` to `.env.local` and fill in values                                 |
+| Git push rejected                               | Git identity not configured                             | Run `git config --global user.email` and `git config --global user.name`               |
+| Supabase data visible but edits fail            | RLS policy missing for authenticated write              | Add insert/update policies to the table in `supabase-schema.sql` and run in SQL Editor |
+| Commit or push blocked with a gate failure      | `npm run verify` failed (typecheck/lint/format/coverage/e2e) | Run `npm run verify` manually, read the actual failure — the hooks run nothing extra |
+| `npx playwright test` can't launch the browser  | Missing/corrupt local Chromium binary, or a Playwright CDN gap for the pinned revision's headless-shell asset | Run `npx playwright install chromium`; `playwright.config.ts` already forces `channel: 'chromium'` (full binary) to route around headless-shell CDN gaps |
+| Pushed to `main` but nothing deployed           | Auto-deploy is intentionally disabled (`vercel.json`)   | Run `npm run deploy` — deploys are always manual now                                   |
 
 ## Workflow Directives
 
@@ -213,6 +230,7 @@ This sequence applies to every task — a one-line fix and a new feature follow 
 Do exactly what was asked and nothing more. Do not refactor surrounding code, rename variables for consistency, add unrequested error handling, or restructure files that weren't mentioned.
 
 **Commit format**
+
 - `feat:` — new functionality
 - `fix:` — bug fix
 - `chore:` — config, dependencies, tooling
@@ -221,9 +239,12 @@ Do exactly what was asked and nothing more. Do not refactor surrounding code, re
 **Skills**
 Before starting any task that has a matching skill file in `skills/`, read that file first. Skill files define the exact sequence for common operations in this project.
 
-| Task | Skill file |
-|------|------------|
-| Add a new database field | `skills/add-db-field.md` |
-| Add a new page | `skills/add-page.md` |
-| Update the AI prompt | `skills/ai-prompt-update.md` |
-| Anything involving case or location tracking | `skills/case-tracking.md` |
+| Task                                         | Skill file                   |
+| -------------------------------------------- | ---------------------------- |
+| Add a new database field                     | `skills/add-db-field.md`     |
+| Add a new page                               | `skills/add-page.md`         |
+| Update the AI prompt                         | `skills/ai-prompt-update.md` |
+| Anything involving case or location tracking | `skills/case-tracking.md`    |
+| Adding or changing a feature                  | `.claude/skills/writing-tests/SKILL.md`                |
+| Editing existing behavior or fixing a bug     | `.claude/skills/guarding-against-regressions/SKILL.md` |
+| Auditing deps, coverage, lint/type drift      | `.claude/skills/maintaining-codebase/SKILL.md`         |

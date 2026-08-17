@@ -12,8 +12,11 @@ export default defineConfig({
     trace: 'on-first-retry',
   },
   projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
-    { name: 'Mobile Chrome', use: { ...devices['Pixel 5'] } },
+    // channel: 'chromium' forces the full Chrome-for-Testing binary instead of
+    // chromium-headless-shell — the headless-shell asset for some revisions
+    // has been pruned from Microsoft's CDN while the full build remains.
+    { name: 'chromium', use: { ...devices['Desktop Chrome'], channel: 'chromium' } },
+    { name: 'Mobile Chrome', use: { ...devices['Pixel 5'], channel: 'chromium' } },
   ],
   webServer: {
     command: 'npm run dev',

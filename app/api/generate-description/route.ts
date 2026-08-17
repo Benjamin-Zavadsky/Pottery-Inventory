@@ -1,9 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server'
-import Anthropic from '@anthropic-ai/sdk'
+import { NextRequest, NextResponse } from 'next/server';
+import Anthropic from '@anthropic-ai/sdk';
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-type ImageInput = { imageBase64: string; mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' }
+type ImageInput = {
+  imageBase64: string;
+  mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+};
 
 const SYSTEM_PROMPT = `You are a specialist in archaeological ceramics with deep expertise in North American Indigenous pottery traditions, pre-Columbian ceramics, and world pottery. You have encyclopedic knowledge of the following traditions and their diagnostic markers:
 
@@ -28,16 +31,17 @@ CRITICAL ATTRIBUTION RULES:
 2. Look for visible shell temper (white flecks in paste) as a strong indicator of Mississippian origin.
 3. When two traditions share a visual feature (e.g., spirals + effigy form), explicitly name both possibilities and explain what additional evidence would distinguish them.
 4. Express uncertainty with specific reasoning — never make a confident attribution when the evidence is ambiguous.
-5. Note if the image quality or angle limits your ability to observe key diagnostic features.`
+5. Note if the image quality or angle limits your ability to observe key diagnostic features.`;
 
 function buildTextPrompt(imageCount: number, userContext?: string): string {
-  const intro = imageCount > 1
-    ? `Examine these ${imageCount} photographs of the same pottery piece taken from different angles. Synthesize observations across all images — features visible in one photo but not others are equally valid. Cross-reference each angle to build the most complete and accurate attribution possible.`
-    : `Examine this pottery piece with rigorous attention to its specific visual details. Do NOT give a generic response — every observation must be grounded in what is actually visible in this image.`
+  const intro =
+    imageCount > 1
+      ? `Examine these ${imageCount} photographs of the same pottery piece taken from different angles. Synthesize observations across all images — features visible in one photo but not others are equally valid. Cross-reference each angle to build the most complete and accurate attribution possible.`
+      : `Examine this pottery piece with rigorous attention to its specific visual details. Do NOT give a generic response — every observation must be grounded in what is actually visible in this image.`;
 
   const contextBlock = userContext
     ? `\n\nThe collector has provided the following observations and context. Factor these into your analysis:\n\n"${userContext}"\n`
-    : ''
+    : '';
 
   return `${intro}${contextBlock}
 
@@ -66,29 +70,30 @@ Return ONLY a single valid JSON object — no explanation, no markdown, no text 
   "rarity": "One of exactly: Common, Uncommon, Rare, Museum-Grade",
   "originality": "One of exactly: Authenticated Original, Suspected Original, Reproduction, Unknown",
   "dimensions": "Estimated dimensions if scale is visible. 15 words max. null otherwise."
-}`
+}`;
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
+    const body = await request.json();
 
     // Support both single image (legacy) and multiple images
-    const images: ImageInput[] = body.images
-      ?? [{ imageBase64: body.imageBase64, mediaType: body.mediaType }]
+    const images: ImageInput[] = body.images ?? [
+      { imageBase64: body.imageBase64, mediaType: body.mediaType },
+    ];
 
     if (!images.length || !images[0].imageBase64) {
-      return NextResponse.json({ error: 'Missing image data' }, { status: 400 })
+      return NextResponse.json({ error: 'Missing image data' }, { status: 400 });
     }
 
-    const imageBlocks = images.map(img => ({
+    const imageBlocks = images.map((img) => ({
       type: 'image' as const,
       source: {
         type: 'base64' as const,
         media_type: img.mediaType,
         data: img.imageBase64,
       },
-    }))
+    }));
 
     const response = await client.messages.create({
       model: 'claude-opus-4-7',
@@ -103,20 +108,20 @@ export async function POST(request: NextRequest) {
           ],
         },
       ],
-    })
+    });
 
-    const text = response.content.find(b => b.type === 'text')?.text ?? ''
-    const jsonMatch = text.match(/\{[\s\S]*\}/)
+    const text = response.content.find((b) => b.type === 'text')?.text ?? '';
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
-      return NextResponse.json({ error: 'Failed to parse response' }, { status: 500 })
+      return NextResponse.json({ error: 'Failed to parse response' }, { status: 500 });
     }
 
-    const result = JSON.parse(jsonMatch[0])
-    result.research_notes = null
+    const result = JSON.parse(jsonMatch[0]);
+    result.research_notes = null;
 
-    return NextResponse.json(result)
+    return NextResponse.json(result);
   } catch (err) {
-    console.error('Claude API error:', err)
-    return NextResponse.json({ error: 'Failed to generate description' }, { status: 500 })
+    console.error('Claude API error:', err);
+    return NextResponse.json({ error: 'Failed to generate description' }, { status: 500 });
   }
 }

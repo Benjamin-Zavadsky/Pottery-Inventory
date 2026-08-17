@@ -1,32 +1,32 @@
-'use client'
+'use client';
 
-import { useState, useMemo } from 'react'
-import { CASES } from '@/lib/constants'
-import type { PotteryItem } from '@/lib/types'
+import { useState, useMemo } from 'react';
+import { CASES } from '@/lib/constants';
+import type { PotteryItem } from '@/lib/types';
 
 interface Props {
-  items: PotteryItem[]
-  onEditPiece: (item: PotteryItem) => void
+  items: PotteryItem[];
+  onEditPiece: (item: PotteryItem) => void;
 }
 
 export default function InventoryCase({ items, onEditPiece }: Props) {
-  const [expandedCases, setExpandedCases] = useState<Set<string>>(new Set(CASES.map(c => c.id)))
+  const [expandedCases, setExpandedCases] = useState<Set<string>>(new Set(CASES.map((c) => c.id)));
 
   const caseGroups = useMemo(() => {
-    const groups = CASES.map(c => ({
+    const groups = CASES.map((c) => ({
       ...c,
-      pieces: items.filter(item => item.case_id === c.id),
-    }))
-    const unassigned = items.filter(item => !item.case_id)
-    return { groups, unassigned }
-  }, [items])
+      pieces: items.filter((item) => item.case_id === c.id),
+    }));
+    const unassigned = items.filter((item) => !item.case_id);
+    return { groups, unassigned };
+  }, [items]);
 
   function toggleCase(id: string) {
-    setExpandedCases(prev => {
-      const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
-      return next
-    })
+    setExpandedCases((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
   }
 
   return (
@@ -36,13 +36,15 @@ export default function InventoryCase({ items, onEditPiece }: Props) {
     >
       {/* Header */}
       <div className="sticky top-0 z-10 px-5 py-3 border-b border-[#e4e4e7] bg-white flex items-center justify-between">
-        <span className="text-xs font-semibold text-[#111] uppercase tracking-widest">Collection by Case</span>
+        <span className="text-xs font-semibold text-[#111] uppercase tracking-widest">
+          Collection by Case
+        </span>
         <span className="text-xs text-[#999]">{items.length} pieces</span>
       </div>
 
       <div className="flex flex-col divide-y divide-[#e4e4e7]">
         {caseGroups.groups.map(({ id, name, description, pieces }) => {
-          const isOpen = expandedCases.has(id)
+          const isOpen = expandedCases.has(id);
           return (
             <div key={id}>
               {/* Case row */}
@@ -53,13 +55,19 @@ export default function InventoryCase({ items, onEditPiece }: Props) {
                 <div className="w-1 h-7 rounded-full shrink-0 bg-[#111]" />
                 <div className="flex-1 min-w-0">
                   <span className="text-sm font-semibold text-[#111]">{name}</span>
-                  {description && (
-                    <p className="text-xs text-[#999] mt-0.5">{description}</p>
-                  )}
+                  {description && <p className="text-xs text-[#999] mt-0.5">{description}</p>}
                 </div>
-                <span className="text-xs text-[#999] mr-2 shrink-0">{pieces.length} {pieces.length === 1 ? 'piece' : 'pieces'}</span>
+                <span className="text-xs text-[#999] mr-2 shrink-0">
+                  {pieces.length} {pieces.length === 1 ? 'piece' : 'pieces'}
+                </span>
                 <svg
-                  width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#aaa" strokeWidth="2.5" strokeLinecap="round"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="#aaa"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
                   className="shrink-0 transition-transform duration-200"
                   style={{ transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}
                 >
@@ -71,11 +79,13 @@ export default function InventoryCase({ items, onEditPiece }: Props) {
               {isOpen && (
                 <div className="bg-white border-t border-[#f0f0f0]">
                   {pieces.length === 0 ? (
-                    <p className="pl-9 pr-5 py-4 text-sm text-[#bbb]">No pieces assigned to this case.</p>
+                    <p className="pl-9 pr-5 py-4 text-sm text-[#bbb]">
+                      No pieces assigned to this case.
+                    </p>
                   ) : (
                     <div className="pl-9 pr-5 pb-4 pt-3 overflow-x-auto">
                       <div className="flex gap-3" style={{ width: 'max-content' }}>
-                        {pieces.map(piece => (
+                        {pieces.map((piece) => (
                           <button
                             key={piece.id}
                             onClick={() => onEditPiece(piece)}
@@ -91,7 +101,14 @@ export default function InventoryCase({ items, onEditPiece }: Props) {
                                 />
                               ) : (
                                 <div className="w-full h-full flex items-center justify-center">
-                                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ccc" strokeWidth="1.5">
+                                  <svg
+                                    width="20"
+                                    height="20"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="#ccc"
+                                    strokeWidth="1.5"
+                                  >
                                     <rect x="3" y="3" width="18" height="18" rx="2" />
                                     <circle cx="8.5" cy="8.5" r="1.5" />
                                     <polyline points="21 15 16 10 5 21" />
@@ -114,14 +131,14 @@ export default function InventoryCase({ items, onEditPiece }: Props) {
                 </div>
               )}
             </div>
-          )
+          );
         })}
 
         {/* Unassigned */}
         {(() => {
-          const id = '__unassigned__'
-          const isOpen = expandedCases.has(id)
-          const pieces = caseGroups.unassigned
+          const id = '__unassigned__';
+          const isOpen = expandedCases.has(id);
+          const pieces = caseGroups.unassigned;
           return (
             <div key={id}>
               <button
@@ -133,9 +150,17 @@ export default function InventoryCase({ items, onEditPiece }: Props) {
                   <span className="text-sm font-semibold text-[#999]">Unassigned</span>
                   <p className="text-xs text-[#bbb] mt-0.5">Pieces not yet placed in a case</p>
                 </div>
-                <span className="text-xs text-[#999] mr-2 shrink-0">{pieces.length} {pieces.length === 1 ? 'piece' : 'pieces'}</span>
+                <span className="text-xs text-[#999] mr-2 shrink-0">
+                  {pieces.length} {pieces.length === 1 ? 'piece' : 'pieces'}
+                </span>
                 <svg
-                  width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#aaa" strokeWidth="2.5" strokeLinecap="round"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="#aaa"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
                   className="shrink-0 transition-transform duration-200"
                   style={{ transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}
                 >
@@ -146,11 +171,13 @@ export default function InventoryCase({ items, onEditPiece }: Props) {
               {isOpen && (
                 <div className="bg-white border-t border-[#f0f0f0]">
                   {pieces.length === 0 ? (
-                    <p className="pl-9 pr-5 py-4 text-sm text-[#bbb]">All pieces are assigned to a case.</p>
+                    <p className="pl-9 pr-5 py-4 text-sm text-[#bbb]">
+                      All pieces are assigned to a case.
+                    </p>
                   ) : (
                     <div className="pl-9 pr-5 pb-4 pt-3 overflow-x-auto">
                       <div className="flex gap-3" style={{ width: 'max-content' }}>
-                        {pieces.map(piece => (
+                        {pieces.map((piece) => (
                           <button
                             key={piece.id}
                             onClick={() => onEditPiece(piece)}
@@ -166,7 +193,14 @@ export default function InventoryCase({ items, onEditPiece }: Props) {
                                 />
                               ) : (
                                 <div className="w-full h-full flex items-center justify-center">
-                                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ccc" strokeWidth="1.5">
+                                  <svg
+                                    width="20"
+                                    height="20"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="#ccc"
+                                    strokeWidth="1.5"
+                                  >
                                     <rect x="3" y="3" width="18" height="18" rx="2" />
                                     <circle cx="8.5" cy="8.5" r="1.5" />
                                     <polyline points="21 15 16 10 5 21" />
@@ -189,9 +223,9 @@ export default function InventoryCase({ items, onEditPiece }: Props) {
                 </div>
               )}
             </div>
-          )
+          );
         })()}
       </div>
     </div>
-  )
+  );
 }

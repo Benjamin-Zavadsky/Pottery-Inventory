@@ -28,10 +28,7 @@ function SuggestionsPanel({
       {Object.entries(suggestions).map(([key, value]) => (
         <div key={key}>
           <span>{value}</span>
-          <button
-            onClick={() => onApply(key, value)}
-            disabled={appliedKeys.has(key)}
-          >
+          <button onClick={() => onApply(key, value)} disabled={appliedKeys.has(key)}>
             {appliedKeys.has(key) ? '✓' : 'Apply'}
           </button>
         </div>
