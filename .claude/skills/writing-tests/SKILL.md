@@ -41,14 +41,14 @@ file's intent explicit at a glance.
 Every component/page that touches Supabase follows this exact pattern:
 
 ```ts
-vi.mock('@/lib/supabase', () => ({ createClient: vi.fn() }))
-import { createClient } from '@/lib/supabase'
-import { createSupabaseMock } from '../support/supabaseMock'
+vi.mock('@/lib/supabase', () => ({ createClient: vi.fn() }));
+import { createClient } from '@/lib/supabase';
+import { createSupabaseMock } from '../support/supabaseMock';
 
-const supabaseMock = createSupabaseMock()
+const supabaseMock = createSupabaseMock();
 vi.mocked(createClient).mockReturnValue(
   supabaseMock.supabase as unknown as ReturnType<typeof createClient>,
-)
+);
 ```
 
 The `as unknown as` is required — the mock's shape doesn't structurally
@@ -85,11 +85,15 @@ to vary the returned value between `it()` blocks (e.g. a different route
 param), don't hardcode it in the factory — close over a mutable `let`:
 
 ```ts
-let currentId = 'A'
-vi.mock('next/navigation', () => ({ useParams: () => ({ id: currentId }) }))
+let currentId = 'A';
+vi.mock('next/navigation', () => ({ useParams: () => ({ id: currentId }) }));
 // ...
-beforeEach(() => { currentId = 'A' })
-it('handles an unknown id', () => { currentId = 'ZZZ'; /* ... */ })
+beforeEach(() => {
+  currentId = 'A';
+});
+it('handles an unknown id', () => {
+  currentId = 'ZZZ'; /* ... */
+});
 ```
 
 ## Mocking dynamically-imported components
@@ -106,10 +110,12 @@ Never let a test call the real Anthropic API. Mock the SDK with `vi.hoisted`
 so the spy is visible inside `vi.mock`'s factory:
 
 ```ts
-const { mockCreate } = vi.hoisted(() => ({ mockCreate: vi.fn() }))
+const { mockCreate } = vi.hoisted(() => ({ mockCreate: vi.fn() }));
 vi.mock('@anthropic-ai/sdk', () => ({
-  default: class Anthropic { messages = { create: mockCreate } },
-}))
+  default: class Anthropic {
+    messages = { create: mockCreate };
+  },
+}));
 ```
 
 ## Photo-resize flows (add page, item detail page)
@@ -142,7 +148,7 @@ navigating, so specs don't depend on live data:
 ```ts
 await page.route('**/rest/v1/pottery**', (route) =>
   route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([fixture]) }),
-)
+);
 ```
 
 Unauthenticated/public flows (browsing, viewing an item) need no auth mock —

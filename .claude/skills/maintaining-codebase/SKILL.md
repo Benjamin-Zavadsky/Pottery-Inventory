@@ -38,7 +38,7 @@ to decide on.
      drift here usually means the gate was bypassed (`--no-verify`) or the
      rule set changed underneath the repo (e.g. a `next`/`eslint-config-next`
      upgrade adding a new rule, as happened with `react-hooks/set-state-in-
-     effect`). Fix formatting automatically (`npm run format`); report lint
+effect`). Fix formatting automatically (`npm run format`); report lint
      errors for review rather than blindly auto-fixing logic-adjacent rules.
 
 4. **Dead code**
@@ -55,7 +55,7 @@ to decide on.
 
 5. **TODO / FIXME debt**
    - `grep -rn "TODO\|FIXME" app/ components/ lib/` — age them against `git
-     blame` if the count is large enough to prioritize.
+blame` if the count is large enough to prioritize.
 
 6. **Doc drift vs. CLAUDE.md**
    - Cross-check `CLAUDE.md`'s claims against actual repo state — it has
@@ -69,13 +69,14 @@ to decide on.
 
 7. **Security-adjacent** (full checklist lives in the `security-baseline`
    skill, not duplicated here) — spot-check at minimum: `app/api/generate-
-   description/route.ts` has no method/auth/rate-limit check at all, so
+description/route.ts` has no method/auth/rate-limit check at all, so
    anyone with the URL can trigger a billed Anthropic call — flag this every
    audit until it's addressed, it won't fix itself.
 
 ## Reporting
 
 Group findings as:
+
 - **Breaking** — coverage below threshold, lint/type errors, a broken
   build. Fix now if safe, otherwise block and hand off.
 - **Risky** — security gaps, major dependency upgrades needed, dead code

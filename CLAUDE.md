@@ -197,23 +197,23 @@ npm run dev
 
 ## Recovery Runbook
 
-| Symptom                                         | Cause                                                   | Fix                                                                                    |
-| ----------------------------------------------- | ------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| "Failed to fetch" / infinite re-render          | `createClient()` outside `useMemo`                      | Wrap in `useMemo(() => createClient(), [])`                                            |
-| Vercel build fails                              | Missing environment variables                           | Add all three env vars in Vercel → Settings → Environment Variables                    |
-| Vercel shows "Ready" but returns 404            | Deployment Protection enabled                           | Disable in Vercel → Settings → Deployment Protection                                   |
-| Save fails with "Something went wrong"          | Supabase error not surfaced, or unknown column inserted | Check browser console. Verify all insert fields exist in `supabase-schema.sql`         |
-| Save fails with "violates check constraint"     | AI returned invalid value for constrained field         | Validate `condition`, `rarity`, `originality` against allowed arrays before inserting  |
-| Multi-photo analysis only processes first photo | Images not resized — payload exceeds 4.5MB              | Ensure canvas resize runs before base64 encoding                                       |
-| AI analysis returns no results                  | Invalid model name or missing API key                   | Verify `ANTHROPIC_API_KEY` is set. Model must be `claude-opus-4-7`                     |
-| Photos not showing after upload                 | Storage bucket not public                               | Supabase → Storage → pottery-photos → Make Public                                      |
-| "relation pottery does not exist"               | Schema not run in Supabase                              | Run `supabase-schema.sql` in Supabase Dashboard → SQL Editor                           |
-| New contributor can't run the app               | Environment variables not configured                    | Copy `.env.example` to `.env.local` and fill in values                                 |
-| Git push rejected                               | Git identity not configured                             | Run `git config --global user.email` and `git config --global user.name`               |
-| Supabase data visible but edits fail            | RLS policy missing for authenticated write              | Add insert/update policies to the table in `supabase-schema.sql` and run in SQL Editor |
-| Commit or push blocked with a gate failure      | `npm run verify` failed (typecheck/lint/format/coverage/e2e) | Run `npm run verify` manually, read the actual failure — the hooks run nothing extra |
+| Symptom                                         | Cause                                                                                                         | Fix                                                                                                                                                      |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| "Failed to fetch" / infinite re-render          | `createClient()` outside `useMemo`                                                                            | Wrap in `useMemo(() => createClient(), [])`                                                                                                              |
+| Vercel build fails                              | Missing environment variables                                                                                 | Add all three env vars in Vercel → Settings → Environment Variables                                                                                      |
+| Vercel shows "Ready" but returns 404            | Deployment Protection enabled                                                                                 | Disable in Vercel → Settings → Deployment Protection                                                                                                     |
+| Save fails with "Something went wrong"          | Supabase error not surfaced, or unknown column inserted                                                       | Check browser console. Verify all insert fields exist in `supabase-schema.sql`                                                                           |
+| Save fails with "violates check constraint"     | AI returned invalid value for constrained field                                                               | Validate `condition`, `rarity`, `originality` against allowed arrays before inserting                                                                    |
+| Multi-photo analysis only processes first photo | Images not resized — payload exceeds 4.5MB                                                                    | Ensure canvas resize runs before base64 encoding                                                                                                         |
+| AI analysis returns no results                  | Invalid model name or missing API key                                                                         | Verify `ANTHROPIC_API_KEY` is set. Model must be `claude-opus-4-7`                                                                                       |
+| Photos not showing after upload                 | Storage bucket not public                                                                                     | Supabase → Storage → pottery-photos → Make Public                                                                                                        |
+| "relation pottery does not exist"               | Schema not run in Supabase                                                                                    | Run `supabase-schema.sql` in Supabase Dashboard → SQL Editor                                                                                             |
+| New contributor can't run the app               | Environment variables not configured                                                                          | Copy `.env.example` to `.env.local` and fill in values                                                                                                   |
+| Git push rejected                               | Git identity not configured                                                                                   | Run `git config --global user.email` and `git config --global user.name`                                                                                 |
+| Supabase data visible but edits fail            | RLS policy missing for authenticated write                                                                    | Add insert/update policies to the table in `supabase-schema.sql` and run in SQL Editor                                                                   |
+| Commit or push blocked with a gate failure      | `npm run verify` failed (typecheck/lint/format/coverage/e2e)                                                  | Run `npm run verify` manually, read the actual failure — the hooks run nothing extra                                                                     |
 | `npx playwright test` can't launch the browser  | Missing/corrupt local Chromium binary, or a Playwright CDN gap for the pinned revision's headless-shell asset | Run `npx playwright install chromium`; `playwright.config.ts` already forces `channel: 'chromium'` (full binary) to route around headless-shell CDN gaps |
-| Pushed to `main` but nothing deployed           | Auto-deploy is intentionally disabled (`vercel.json`)   | Run `npm run deploy` — deploys are always manual now                                   |
+| Pushed to `main` but nothing deployed           | Auto-deploy is intentionally disabled (`vercel.json`)                                                         | Run `npm run deploy` — deploys are always manual now                                                                                                     |
 
 ## Workflow Directives
 
@@ -239,12 +239,12 @@ Do exactly what was asked and nothing more. Do not refactor surrounding code, re
 **Skills**
 Before starting any task that has a matching skill file in `skills/`, read that file first. Skill files define the exact sequence for common operations in this project.
 
-| Task                                         | Skill file                   |
-| -------------------------------------------- | ---------------------------- |
-| Add a new database field                     | `skills/add-db-field.md`     |
-| Add a new page                               | `skills/add-page.md`         |
-| Update the AI prompt                         | `skills/ai-prompt-update.md` |
-| Anything involving case or location tracking | `skills/case-tracking.md`    |
-| Adding or changing a feature                  | `.claude/skills/writing-tests/SKILL.md`                |
-| Editing existing behavior or fixing a bug     | `.claude/skills/guarding-against-regressions/SKILL.md` |
-| Auditing deps, coverage, lint/type drift      | `.claude/skills/maintaining-codebase/SKILL.md`         |
+| Task                                         | Skill file                                             |
+| -------------------------------------------- | ------------------------------------------------------ |
+| Add a new database field                     | `skills/add-db-field.md`                               |
+| Add a new page                               | `skills/add-page.md`                                   |
+| Update the AI prompt                         | `skills/ai-prompt-update.md`                           |
+| Anything involving case or location tracking | `skills/case-tracking.md`                              |
+| Adding or changing a feature                 | `.claude/skills/writing-tests/SKILL.md`                |
+| Editing existing behavior or fixing a bug    | `.claude/skills/guarding-against-regressions/SKILL.md` |
+| Auditing deps, coverage, lint/type drift     | `.claude/skills/maintaining-codebase/SKILL.md`         |

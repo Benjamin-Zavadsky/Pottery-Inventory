@@ -24,14 +24,24 @@ const FIXTURE_PIECE = {
 
 test.beforeEach(async ({ page }) => {
   await page.route('**/rest/v1/cases**', (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([FIXTURE_CASE]) }),
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([FIXTURE_CASE]),
+    }),
   );
   await page.route('**/rest/v1/pottery**', (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([FIXTURE_PIECE]) }),
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([FIXTURE_PIECE]),
+    }),
   );
 });
 
-test('public user can browse cases and open a case with a mocked piece inside', async ({ page }) => {
+test('public user can browse cases and open a case with a mocked piece inside', async ({
+  page,
+}) => {
   await page.goto('/cases');
   await expect(page.getByText('A — Left Tower')).toBeVisible();
 
@@ -50,7 +60,11 @@ test('public user can open the item detail page for a piece from the case', asyn
         body: JSON.stringify(FIXTURE_PIECE),
       });
     }
-    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([FIXTURE_PIECE]) });
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([FIXTURE_PIECE]),
+    });
   });
 
   await page.goto(`/item/${FIXTURE_PIECE.id}`);

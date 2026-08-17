@@ -14,7 +14,7 @@ description: >-
 Read the current implementation and its existing test file in
 `__tests__/components/` or `__tests__/unit/` fully before touching either.
 If the behavior you're about to change has no test covering it yet, write
-one that pins the *current* behavior first, confirm it passes, then make
+one that pins the _current_ behavior first, confirm it passes, then make
 your change and update the test deliberately — don't change behavior and
 test in the same uncharacterized step.
 
