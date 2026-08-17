@@ -5,3 +5,6 @@ dist/
 public/
 *.tsbuildinfo
 package-lock.json
+
+# personal/local overrides — not shared, not worth gating on formatting
+.claude/settings.local.json
