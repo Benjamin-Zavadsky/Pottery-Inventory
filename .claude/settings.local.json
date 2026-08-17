@@ -1,7 +1,5 @@
 {
   "permissions": {
-    "allow": [
-      "WebFetch(domain:pottery-inventory.vercel.app)"
-    ]
+    "allow": ["WebFetch(domain:pottery-inventory.vercel.app)"]
   }
 }
