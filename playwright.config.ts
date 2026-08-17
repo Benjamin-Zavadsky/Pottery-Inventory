@@ -19,8 +19,12 @@ export default defineConfig({
     { name: 'Mobile Chrome', use: { ...devices['Pixel 5'], channel: 'chromium' } },
   ],
   webServer: {
-    command: 'npm run dev',
+    // CI uses a production build+start — faster and more deterministic than
+    // a cold `next dev` compile, which routinely blows past Playwright's
+    // default 60s webServer timeout on a fresh runner with no build cache.
+    command: process.env.CI ? 'npm run build && npm run start' : 'npm run dev',
     url: 'http://localhost:3000',
     reuseExistingServer: !process.env.CI,
+    timeout: 180_000,
   },
 });
