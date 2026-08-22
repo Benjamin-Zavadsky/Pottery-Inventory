@@ -4,13 +4,9 @@ import { useEffect, useState, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase';
-import { CASES, CASE_IDS } from '@/lib/constants';
+import { CASES, CASE_IDS, CONDITIONS, RARITIES, ORIGINALITIES } from '@/lib/constants';
 import type { PotteryItem } from '@/lib/types';
 import type { User } from '@supabase/supabase-js';
-
-const CONDITIONS = ['Mint', 'Excellent', 'Good', 'Fair', 'Poor'];
-const RARITIES = ['Common', 'Uncommon', 'Rare', 'Museum-Grade'];
-const ORIGINALITIES = ['Authenticated Original', 'Suspected Original', 'Reproduction', 'Unknown'];
 
 const SUGGESTION_LABELS: Record<string, string> = {
   description: 'Description',

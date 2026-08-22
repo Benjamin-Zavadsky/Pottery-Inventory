@@ -5,11 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase';
 import AuthGuard from '@/components/AuthGuard';
-import { CASES, CASE_IDS } from '@/lib/constants';
-
-const CONDITIONS = ['Mint', 'Excellent', 'Good', 'Fair', 'Poor'];
-const RARITIES = ['Common', 'Uncommon', 'Rare', 'Museum-Grade'];
-const ORIGINALITIES = ['Authenticated Original', 'Suspected Original', 'Reproduction', 'Unknown'];
+import { CASES, CASE_IDS, CONDITIONS, RARITIES, ORIGINALITIES } from '@/lib/constants';
 
 type PhotoMode = 'single' | 'multi' | null;
 
@@ -200,9 +196,13 @@ export default function AddPage() {
           age: form.age,
           color: form.color,
           tribe_culture: form.tribe_culture || null,
-          condition: CONDITIONS.includes(form.condition) ? form.condition : null,
-          rarity: RARITIES.includes(form.rarity) ? form.rarity : null,
-          originality: ORIGINALITIES.includes(form.originality) ? form.originality : null,
+          condition: CONDITIONS.includes(form.condition as (typeof CONDITIONS)[number])
+            ? form.condition
+            : null,
+          rarity: RARITIES.includes(form.rarity as (typeof RARITIES)[number]) ? form.rarity : null,
+          originality: ORIGINALITIES.includes(form.originality as (typeof ORIGINALITIES)[number])
+            ? form.originality
+            : null,
           dimensions: form.dimensions || null,
           date_acquired: form.date_acquired || null,
           location_acquired: form.location_acquired || null,

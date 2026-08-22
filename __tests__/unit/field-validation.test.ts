@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest';
+import { CONDITIONS, RARITIES, ORIGINALITIES } from '@/lib/constants';
 
-const CONDITIONS = ['Mint', 'Excellent', 'Good', 'Fair', 'Poor'];
-const RARITIES = ['Common', 'Uncommon', 'Rare', 'Museum-Grade'];
-const ORIGINALITIES = ['Authenticated Original', 'Suspected Original', 'Reproduction', 'Unknown'];
+// Widened to plain string[] so arbitrary (invalid) AI-returned strings can be checked below.
+const conditionValues: readonly string[] = CONDITIONS;
+const rarityValues: readonly string[] = RARITIES;
+const originalityValues: readonly string[] = ORIGINALITIES;
 
 describe('condition validation', () => {
   it('accepts all valid condition values', () => {
@@ -10,9 +12,9 @@ describe('condition validation', () => {
   });
 
   it('rejects invalid values the AI might return', () => {
-    expect(CONDITIONS.includes('Perfect')).toBe(false);
-    expect(CONDITIONS.includes('Good Condition')).toBe(false);
-    expect(CONDITIONS.includes('')).toBe(false);
+    expect(conditionValues.includes('Perfect')).toBe(false);
+    expect(conditionValues.includes('Good Condition')).toBe(false);
+    expect(conditionValues.includes('')).toBe(false);
   });
 });
 
@@ -22,9 +24,9 @@ describe('rarity validation', () => {
   });
 
   it('rejects invalid values the AI might return', () => {
-    expect(RARITIES.includes('Very Rare')).toBe(false);
-    expect(RARITIES.includes('museum-grade')).toBe(false);
-    expect(RARITIES.includes('')).toBe(false);
+    expect(rarityValues.includes('Very Rare')).toBe(false);
+    expect(rarityValues.includes('museum-grade')).toBe(false);
+    expect(rarityValues.includes('')).toBe(false);
   });
 });
 
@@ -34,9 +36,9 @@ describe('originality validation', () => {
   });
 
   it('rejects invalid values the AI might return', () => {
-    expect(ORIGINALITIES.includes('Original')).toBe(false);
-    expect(ORIGINALITIES.includes('Authenticated')).toBe(false);
-    expect(ORIGINALITIES.includes('authenticated original')).toBe(false);
-    expect(ORIGINALITIES.includes('')).toBe(false);
+    expect(originalityValues.includes('Original')).toBe(false);
+    expect(originalityValues.includes('Authenticated')).toBe(false);
+    expect(originalityValues.includes('authenticated original')).toBe(false);
+    expect(originalityValues.includes('')).toBe(false);
   });
 });

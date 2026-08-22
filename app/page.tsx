@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase';
+import { CONDITIONS, RARITIES, ORIGINALITIES } from '@/lib/constants';
 import type { PotteryItem } from '@/lib/types';
 import BottomNav from '@/components/BottomNav';
 import type { User } from '@supabase/supabase-js';
@@ -44,10 +45,6 @@ const InventoryCase = dynamic(() => import('@/components/InventoryCase'), {
   ),
 });
 const PieceModal = dynamic(() => import('@/components/PieceModal'), { ssr: false });
-
-const CONDITIONS = ['Mint', 'Excellent', 'Good', 'Fair', 'Poor'];
-const RARITIES = ['Common', 'Uncommon', 'Rare', 'Museum-Grade'];
-const ORIGINALITIES = ['Authenticated Original', 'Suspected Original', 'Reproduction', 'Unknown'];
 
 type Filters = {
   condition: string;
@@ -522,7 +519,7 @@ function FilterSelect({
   label: string;
   value: string;
   onChange: (v: string) => void;
-  options: string[];
+  options: readonly string[];
 }) {
   return (
     <div className="flex flex-col gap-1">

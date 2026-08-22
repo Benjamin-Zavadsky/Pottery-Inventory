@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
+import { CONDITIONS, RARITIES, ORIGINALITIES } from '@/lib/constants';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -26,12 +27,62 @@ MESOAMERICAN & CENTRAL AMERICAN TRADITIONS:
 SOUTH AMERICAN:
 - Nazca, Moche, Tiwanaku, Inca: Distinctive regional forms and iconographic systems.
 
+EUROPEAN TRADITIONS:
+- Neolithic Europe (Linear Pottery Culture, ~5500 BCE onward): Coarse buff/grey wares with incised linear and spiral bands.
+- Minoan (Crete, 2600–1100 BCE): Polychrome marine-style Kamares/Palace ware — octopus, dolphin, and marine motifs; light-on-dark and dark-on-light painting.
+- Ancient Greece (Attic, 6th–4th c. BCE): Black-figure and red-figure technique on fine orange clay; mythological/genre scenes; forms include amphora, kylix, krater.
+- Ancient Rome (Arretine / Terra Sigillata, 1st c. BCE–4th c. CE): Glossy red-gloss tableware, mold-stamped relief decoration, mass-produced empire-wide.
+- Celtic Europe (La Tène, 5th–1st c. BCE): Wheel-thrown wares with graphite coating or curvilinear incised/stamped decoration.
+- Byzantine (4th–15th c. CE): Polychrome glazed and slip-painted wares, sgraffito (scratched-through-slip) technique.
+
+AFRICAN TRADITIONS:
+- Ancient Egypt: Faience (glazed non-clay blue-green ceramic), Nile silt utilitarian wares, fine marl clay wares, imported Canaanite amphorae.
+- Nubian / Kerma (2500–1500 BCE): Distinctive thin-walled, black-topped red burnished "tulip" beakers.
+- Nok Culture (500 BCE–200 CE, Nigeria): Terracotta figurines with elongated stylized features and pierced pupils, coil-built rather than wheel-thrown.
+- Djenné-Jeno (200 BCE–1400 CE, Mali): Terracotta equestrian and rider figures, funerary urns.
+- Ife / Yoruba (11th–15th c.): Naturalistic terracotta portrait heads with fine surface finishing.
+- Sao Civilization (Chad Basin): Large terracotta funerary urns and anthropomorphic figurines.
+
+MIDDLE EASTERN TRADITIONS:
+- Halaf Culture (6100–5100 BCE): Polychrome geometric and zoomorphic painted fine ware.
+- Ubaid Culture (Mesopotamia): Among the earliest wheel-thrown wares; painted geometric bands on a buff ground.
+- Sumerian: Cylinder-seal impressed wares; mass-produced Jemdet Nasr polychrome.
+- Achaemenid / Persian (550–330 BCE): Rhytons (horn-shaped drinking vessels), polychrome glazed tilework.
+- Islamic Lusterware (9th–10th c., Iraq/Iran): Metallic tin-glaze luster technique.
+- Iznik / Ottoman (15th–17th c.): Cobalt-blue and polychrome floral decoration on fritware.
+- Anatolian Neolithic (Çatalhöyük): Buff burnished wares with geometric incision.
+
+SOUTH ASIAN TRADITIONS:
+- Indus Valley / Harappan: Wheel-thrown red ware with black-painted geometric and pipal-leaf motifs.
+- Painted Grey Ware (1100–600 BCE): Thin grey wheel-made vessels with black/red painted linear designs.
+- Northern Black Polished Ware (700–200 BCE, Ganges valley): Mirror-finish luxury black ware.
+- Mauryan (322–185 BCE): Large storage jars, NBPW continuation.
+- South Indian Megalithic (1200–300 BCE): Black-and-red ware, typically from burial contexts.
+
+EAST ASIAN TRADITIONS:
+- Yangshao Culture (5000–3000 BCE): Red-slipped painted Neolithic pottery, spiral and fish motifs.
+- Longshan Culture (3000–1900 BCE): Eggshell-thin black burnished pottery, wheel-finished.
+- Tang Sancai (7th–9th c.): Three-color lead-glazed funerary ware — running amber, green, and cream/white glazes.
+- Jingdezhen Porcelain: True kaolin-based translucent porcelain; blue-and-white underglaze cobalt or famille rose overglaze enamels.
+- Jōmon Culture (Japan, ~14,000 BCE onward): World's oldest known fired pottery; cord-marked (rope-impressed) surface texture; elaborate flame-rim vessels in later phases.
+- Goryeo Celadon (Korea): Jade-green glaze with inlaid (sanggam) black-and-white slip technique.
+
+SOUTHEAST ASIAN TRADITIONS:
+- Ban Chiang (2100–200 BCE, Thailand): Painted orange/red-on-buff curvilinear designs; later phases show burnished red slip.
+- Dong Son (Vietnam): Bronze Age incised and painted pottery, alongside the culture's famous bronze drums.
+- Khmer / Angkor (9th–15th c., Cambodia): Ash-glazed brown/green stoneware, zoomorphic vessels, architectural ceramics.
+- Majapahit (Java, 13th–15th c.): Local earthenware alongside imported Chinese-influenced glazed stoneware.
+
+OCEANIAN TRADITIONS:
+- Lapita (1600–500 BCE): Dentate-stamped (comb-toothed) geometric pottery ancestral to all Polynesian cultures — the most distinctive decorative technique in the Pacific.
+
 CRITICAL ATTRIBUTION RULES:
 1. Do NOT default to a Latin American attribution for zoomorphic effigy vessels with spiral decoration — this is equally a hallmark of Mississippian culture pottery.
 2. Look for visible shell temper (white flecks in paste) as a strong indicator of Mississippian origin.
 3. When two traditions share a visual feature (e.g., spirals + effigy form), explicitly name both possibilities and explain what additional evidence would distinguish them.
-4. Express uncertainty with specific reasoning — never make a confident attribution when the evidence is ambiguous.
-5. Note if the image quality or angle limits your ability to observe key diagnostic features.`;
+4. Blue-and-white decoration is not automatically Chinese: distinguish Jingdezhen cobalt underglaze (true porcelain, translucent, kaolin-based) from Iznik cobalt-on-fritware (opaque, earthenware-adjacent body) by paste and translucency, not color alone.
+5. Express uncertainty with specific reasoning — never make a confident attribution when the evidence is ambiguous.
+6. Note if the image quality or angle limits your ability to observe key diagnostic features.`;
 
 function buildTextPrompt(imageCount: number, userContext?: string): string {
   const intro =
@@ -66,9 +117,9 @@ Return ONLY a single valid JSON object — no explanation, no markdown, no text 
   "color": "Specific colors of clay body, slip, and decoration as observed. 15 words max.",
   "use_function": "Inferred function based on form and context. 15 words max.",
   "tribe_culture": "Named cultural tradition or archaeological phase. 15 words max.",
-  "condition": "One of exactly: Mint, Excellent, Good, Fair, Poor",
-  "rarity": "One of exactly: Common, Uncommon, Rare, Museum-Grade",
-  "originality": "One of exactly: Authenticated Original, Suspected Original, Reproduction, Unknown",
+  "condition": "One of exactly: ${CONDITIONS.join(', ')}",
+  "rarity": "One of exactly: ${RARITIES.join(', ')}",
+  "originality": "One of exactly: ${ORIGINALITIES.join(', ')}",
   "dimensions": "Estimated dimensions if scale is visible. 15 words max. null otherwise."
 }`;
 }

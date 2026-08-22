@@ -10,6 +10,15 @@ export const CASES = [
 export const CASE_IDS = CASES.map((c) => c.id);
 export type CaseId = (typeof CASES)[number]['id'];
 
+export const CONDITIONS = ['Mint', 'Excellent', 'Good', 'Fair', 'Poor'] as const;
+export const RARITIES = ['Common', 'Uncommon', 'Rare', 'Museum-Grade'] as const;
+export const ORIGINALITIES = [
+  'Authenticated Original',
+  'Suspected Original',
+  'Reproduction',
+  'Unknown',
+] as const;
+
 export type Region =
   | 'North America'
   | 'Mesoamerica'

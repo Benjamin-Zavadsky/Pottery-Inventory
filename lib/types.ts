@@ -1,10 +1,8 @@
-export type Condition = 'Mint' | 'Excellent' | 'Good' | 'Fair' | 'Poor';
-export type Rarity = 'Common' | 'Uncommon' | 'Rare' | 'Museum-Grade';
-export type Originality =
-  | 'Authenticated Original'
-  | 'Suspected Original'
-  | 'Reproduction'
-  | 'Unknown';
+import type { CONDITIONS, RARITIES, ORIGINALITIES } from './constants';
+
+export type Condition = (typeof CONDITIONS)[number];
+export type Rarity = (typeof RARITIES)[number];
+export type Originality = (typeof ORIGINALITIES)[number];
 export type Status = 'Active' | 'Archived' | 'Deaccessioned';
 
 export interface PotteryItem {

@@ -2,10 +2,8 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { createClient } from '@/lib/supabase';
-import { CULTURES, CASES } from '@/lib/constants';
+import { CULTURES, CASES, CONDITIONS } from '@/lib/constants';
 import type { PotteryItem } from '@/lib/types';
-
-const CONDITIONS = ['Mint', 'Excellent', 'Good', 'Fair', 'Poor'];
 
 interface Props {
   mode: 'add' | 'edit';
@@ -74,7 +72,9 @@ export default function PieceModal({ mode, item, onClose, onSaved }: Props) {
             name: form.name.trim(),
             tribe_culture: form.tribe_culture || null,
             age: form.age.trim() || 'Unknown',
-            condition: CONDITIONS.includes(form.condition) ? form.condition : null,
+            condition: CONDITIONS.includes(form.condition as (typeof CONDITIONS)[number])
+              ? form.condition
+              : null,
             case_id: form.case_id || null,
             research_notes: form.research_notes.trim() || null,
             place_of_origin,
@@ -97,7 +97,9 @@ export default function PieceModal({ mode, item, onClose, onSaved }: Props) {
             name: form.name.trim(),
             tribe_culture: form.tribe_culture || null,
             age: form.age.trim() || item.age,
-            condition: CONDITIONS.includes(form.condition) ? form.condition : item.condition,
+            condition: CONDITIONS.includes(form.condition as (typeof CONDITIONS)[number])
+              ? form.condition
+              : item.condition,
             case_id: form.case_id || null,
             research_notes: form.research_notes.trim() || null,
             photos,
