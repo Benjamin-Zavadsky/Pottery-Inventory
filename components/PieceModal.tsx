@@ -29,6 +29,9 @@ export default function PieceModal({ mode, item, onClose, onSaved }: Props) {
 
   useEffect(() => {
     if (mode === 'edit' && item) {
+      // Pre-existing sync-on-reopen pattern; eslint-config-next's newer
+      // react-hooks rules flag it post-upgrade — not part of this change.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setForm({
         name: item.name,
         tribe_culture: item.tribe_culture ?? '',
