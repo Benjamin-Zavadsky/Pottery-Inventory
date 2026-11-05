@@ -22,7 +22,7 @@ Pottery Inventory is a professional collection management system for a family-ow
 
 **Deployment:** Vercel. Auto-deploy-on-push is disabled (`vercel.json` → `git.deploymentEnabled.main: false`) — production deploys are a deliberate `npm run deploy` (runs the full gate, then `vercel --prod`). Environment variables set in Vercel Dashboard. Any change touching `app/api/**` gets a preview deploy (`vercel`) and endpoint smoke-test (confirm expected non-500s, including a wrong-method 405-type check) before promoting to production — the test suite catches logic bugs, not deploy-environment failures like import-time crashes or bundling gaps.
 
-**Testing:** Vitest + React Testing Library for unit and component tests. Playwright for E2E tests. The Anthropic API is mocked in all test contexts. Coverage thresholds are enforced at 90% (statements/branches/functions/lines) over owned code — see `vitest.config.ts` for the include/exclude scope. Both pre-commit and pre-push run the full gate (`npm run verify` = typecheck + lint + format:check + coverage + e2e). GitHub Actions CI runs the same gate on every push/PR to `main` — see `.github/workflows/ci.yml`. Local git hooks live in `scripts/git-hooks/` and are installed into `.git/hooks/` automatically by `npm install` (via the `prepare` script) since `.git/hooks/` itself isn't version-controlled.
+**Testing:** Vitest + React Testing Library for unit and component tests. Playwright for E2E tests. The Anthropic API is mocked in all test contexts. Coverage thresholds are enforced at 90% (statements/branches/functions/lines) over owned code — see `vitest.config.ts` for the include/exclude scope. `npm run check` = typecheck + lint + format:check + coverage + `npm audit` (production dependencies only, fails on high/critical). `npm run verify` = check + e2e. Four enforcement layers run this: a git pre-commit hook, a git pre-push hook, a Claude Code `PreToolUse` hook (`.claude/hooks/pre-push-check.sh`, wired in `.claude/settings.json`) that blocks Claude's own `git push`/`vercel --prod`/`npm run deploy` calls on failure, and GitHub Actions CI on every push/PR to `main` (`.github/workflows/ci.yml`) as the backstop that survives a fresh clone. Local git hooks live in `scripts/git-hooks/` and are installed into `.git/hooks/` automatically by `npm install` (via the `prepare` script) since `.git/hooks/` itself isn't version-controlled.
 
 **Planned — Case & Location Tracking:** A `cases` table, a `location_history` table, and a case management view are planned. The 6 official case locations are: A — Left Tower, B — Center Left, C — Center Right, D — Right Tower, B — Center Left Top Surface, C — Center Right Top Surface. Do not build location features using free-text — always reference the cases table.
 
@@ -166,7 +166,8 @@ npm run test          # Run unit and component tests (Vitest)
 npm run test:coverage # Same, with coverage thresholds enforced (90%)
 npm run test:e2e      # Run end-to-end tests (Playwright)
 npm run typecheck     # TypeScript typecheck without building
-npm run check         # typecheck + lint + format:check + test:coverage — fast inner loop
+npm run audit         # npm audit, production deps only, fails on high/critical
+npm run check         # typecheck + lint + format:check + test:coverage + audit — fast inner loop
 npm run verify        # check + test:e2e — the commit/push/CI gate
 ```
 
@@ -214,6 +215,16 @@ npm run dev
 | Commit or push blocked with a gate failure      | `npm run verify` failed (typecheck/lint/format/coverage/e2e)                                                  | Run `npm run verify` manually, read the actual failure — the hooks run nothing extra                                                                     |
 | `npx playwright test` can't launch the browser  | Missing/corrupt local Chromium binary, or a Playwright CDN gap for the pinned revision's headless-shell asset | Run `npx playwright install chromium`; `playwright.config.ts` already forces `channel: 'chromium'` (full binary) to route around headless-shell CDN gaps |
 | Pushed to `main` but nothing deployed           | Auto-deploy is intentionally disabled (`vercel.json`)                                                         | Run `npm run deploy` — deploys are always manual now                                                                                                     |
+
+## Known Gaps
+
+Accepted security/reliability gaps, tracked deliberately rather than left silent:
+
+- **Local dev shares the production Supabase project.** `.env.local` points at the same project Vercel deploys against — there is no separate staging database. Any schema or data experiment during local dev touches real collection data. Setting up a second Supabase project for local/staging use is a real improvement, not yet done.
+- **No alerting on integration failure.** If the Anthropic API or Supabase starts failing (bad response shape, outage, rate limit), the only signal is a user seeing an error in the browser — nothing pages anyone. No notification channel (email/Slack) is wired up yet.
+- **No granular roles.** Auth is still binary (logged in = full staff access, or anonymous). The planned Admin/Editor split isn't built, so any authenticated account can do everything any other can.
+- **`@anthropic-ai/sdk` has an unpatched moderate vulnerability** (insecure default file permissions in a local filesystem tool this app doesn't use) — the fix requires a major version bump (0.90 → 1.x) that hasn't been evaluated for breaking changes yet.
+- **No rate limiting on `/api/generate-description`.** It now requires a valid staff session (fixed — see git history), but a logged-in account with a compromised session could still script repeated calls and run up Anthropic API cost. No per-user rate limit exists.
 
 ## Workflow Directives
 
