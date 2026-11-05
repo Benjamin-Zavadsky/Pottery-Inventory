@@ -12,11 +12,20 @@ export default defineConfig({
     trace: 'on-first-retry',
   },
   projects: [
-    // channel: 'chromium' forces the full Chrome-for-Testing binary instead of
-    // chromium-headless-shell — the headless-shell asset for some revisions
-    // has been pruned from Microsoft's CDN while the full build remains.
-    { name: 'chromium', use: { ...devices['Desktop Chrome'], channel: 'chromium' } },
-    { name: 'Mobile Chrome', use: { ...devices['Pixel 5'], channel: 'chromium' } },
+    // CI: channel: 'chromium' forces the full Chrome-for-Testing binary
+    // instead of chromium-headless-shell — the headless-shell asset for some
+    // revisions has been pruned from Microsoft's CDN while the full build
+    // remains. Local: use the real, already-installed system Chrome instead
+    // of downloading Playwright's own copy, which kept corrupting on extract
+    // in this environment — channel: 'chrome' skips that download entirely.
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'], channel: process.env.CI ? 'chromium' : 'chrome' },
+    },
+    {
+      name: 'Mobile Chrome',
+      use: { ...devices['Pixel 5'], channel: process.env.CI ? 'chromium' : 'chrome' },
+    },
   ],
   webServer: {
     // CI uses a production build+start — faster and more deterministic than
