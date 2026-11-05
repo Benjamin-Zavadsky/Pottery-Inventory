@@ -1,420 +1,320 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { ReactNode } from 'react';
-import { render, screen, fireEvent, waitFor } from '../support/render';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { fireEvent, renderWithToast, screen, waitFor, within } from '../support/render';
 import { createSupabaseMock } from '../support/supabaseMock';
-import { stubImageAndCanvas, makeFile } from '../support/browser';
+import { makeFile, stubImageAndCanvas } from '../support/browser';
+import { STORAGE, makeItem } from '../support/fixtures';
 
-const mockPush = vi.fn();
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mockPush }) }));
-vi.mock('@/components/AuthGuard', () => ({
-  default: ({ children }: { children: ReactNode }) => <>{children}</>,
+const push = vi.fn();
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push, replace: vi.fn(), refresh: vi.fn() }),
+  usePathname: () => '/add',
 }));
 vi.mock('@/lib/supabase', () => ({ createClient: vi.fn() }));
 
 import { createClient } from '@/lib/supabase';
-import AddPage from '@/app/add/page';
+import AddPage from '@/app/(staff)/add/page';
 
-const supabaseMock = createSupabaseMock();
+const mock = createSupabaseMock();
 vi.mocked(createClient).mockReturnValue(
-  supabaseMock.supabase as unknown as ReturnType<typeof createClient>,
+  mock.supabase as unknown as ReturnType<typeof createClient>,
 );
 
-function fillRequiredFields() {
-  const inputs = screen.getByText('Required').closest('section')!.querySelectorAll('input');
-  fireEvent.change(inputs[0], { target: { value: 'Hand-built Bowl' } });
-  fireEvent.change(inputs[1], { target: { value: 'North America' } });
-  fireEvent.change(inputs[2], { target: { value: '1200 CE' } });
-  fireEvent.change(inputs[3], { target: { value: 'Brown' } });
+const DRAFT_KEY = 'pottery-intake-draft-v1';
+const saved = makeItem({ id: 'new-id', sku: 'P0036', case_id: 'A' });
+
+function queueUpload(name = 'a') {
+  mock.queueResult({});
+  mock.queueResult({ data: { publicUrl: `${STORAGE}/intake/x/${name}.jpg` } });
+  mock.queueResult({});
+  mock.queueResult({ data: { publicUrl: `${STORAGE}/intake/x/thumbs/${name}.jpg` } });
 }
 
-describe('AddPage', () => {
-  beforeEach(() => {
-    mockPush.mockClear();
-    stubImageAndCanvas();
-    global.fetch = vi.fn();
-  });
+function stubAi(
+  body: unknown = { name: 'AI jar', culture_id: 'maya', confidence: 'High' },
+  status = 200,
+) {
+  const fetchMock = vi.fn(() => Promise.resolve(Response.json(body, { status })));
+  vi.stubGlobal('fetch', fetchMock);
+  return fetchMock;
+}
 
-  it('shows the photo mode picker first', () => {
-    render(<AddPage />);
-    expect(screen.getByText('How would you like to photograph this piece?')).toBeInTheDocument();
-  });
+async function addPhoto() {
+  queueUpload();
+  fireEvent.change(screen.getByLabelText('Choose photos'), { target: { files: [makeFile()] } });
+  await screen.findByAltText('Photo 1');
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled());
+}
 
-  it('auto-analyzes after the first photo in single mode', async () => {
-    vi.mocked(global.fetch).mockResolvedValue({
-      json: () => Promise.resolve({ name: 'AI Suggested Name', condition: 'Good' }),
-    } as Response);
+const continueBtn = () => fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
 
-    render(<AddPage />);
-    fireEvent.click(screen.getByText('Single Photo'));
-    fireEvent.change(document.querySelector('input[type="file"]')!, {
-      target: { files: [makeFile()] },
+beforeEach(() => {
+  mock.reset();
+  mock.setUser({ id: 'staff' });
+  push.mockClear();
+  window.localStorage.clear();
+  stubImageAndCanvas();
+  vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+});
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
+
+describe('Add piece intake', () => {
+  it('walks photos → AI → details → location → review and saves with "add next"', async () => {
+    const fetchMock = stubAi();
+    renderWithToast(<AddPage />);
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
+    await addPhoto();
+    fireEvent.change(screen.getByLabelText('Context for the AI'), {
+      target: { value: 'Found in Belize' },
     });
+    continueBtn();
 
-    expect(await screen.findByText('AI Suggested Name')).toBeInTheDocument();
-    expect(global.fetch).toHaveBeenCalledWith(
-      '/api/generate-description',
-      expect.objectContaining({ method: 'POST' }),
+    expect(await screen.findByText('High confidence')).toBeInTheDocument();
+    expect(
+      JSON.parse((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body as string),
+    ).toEqual({
+      imageUrls: [`${STORAGE}/intake/x/a.jpg`],
+      userContext: 'Found in Belize',
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Apply all/ }));
+    expect(screen.getByLabelText(/^Name/, { selector: 'input' })).toHaveValue('AI jar');
+    fireEvent.change(screen.getByLabelText(/^Color/), { target: { value: 'Red' } });
+    continueBtn();
+
+    fireEvent.change(screen.getByLabelText(/^Display case/), { target: { value: 'A' } });
+    fireEvent.change(screen.getByLabelText('Seller / donor'), { target: { value: 'Estate' } });
+    continueBtn();
+
+    const review = screen.getByRole('heading', { name: 'Review' }).parentElement as HTMLElement;
+    expect(within(review).getByText('AI jar')).toBeInTheDocument();
+    expect(within(review).getByText('Maya')).toBeInTheDocument();
+    expect(within(review).getByText(/AI-suggested fields will be flagged/)).toBeInTheDocument();
+
+    mock.queueResult({ data: saved });
+    mock.queueResult({});
+    mock.queueResult({});
+    mock.queueResult({});
+    fireEvent.click(screen.getByRole('button', { name: 'Save & add next' }));
+    expect(await screen.findByText('Saved P0036')).toBeInTheDocument();
+
+    const insert = mock.builders.find((b) => b.insert.mock.calls.length)!;
+    expect(insert.insert.mock.calls[0][0]).toMatchObject({
+      name: 'AI jar',
+      culture_id: 'maya',
+      region: 'Mesoamerica',
+      color: 'Red',
+      case_id: 'A',
+      photos: [`${STORAGE}/intake/x/a.jpg`],
+      thumbs: [`${STORAGE}/intake/x/thumbs/a.jpg`],
+      status: 'Active',
+    });
+    expect(insert.insert.mock.calls[0][0]).not.toHaveProperty('sku');
+    expect(insert.insert.mock.calls[0][0].ai_fields).toContain('name');
+    expect(insert.insert.mock.calls[0][0].ai_fields).not.toContain('color');
+    expect(mock.builders.find((b) => b.upsert.mock.calls.length)!.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ pottery_id: 'new-id', seller_donator: 'Estate' }),
     );
+
+    expect(screen.queryByAltText('Photo 1')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /3\. Location/ }));
+    expect(screen.getByLabelText(/^Display case/)).toHaveValue('A');
+    expect(screen.getByLabelText('Seller / donor')).toHaveValue('Estate');
   });
 
-  it('applies an individual AI suggestion into the form', async () => {
-    vi.mocked(global.fetch).mockResolvedValue({
-      json: () => Promise.resolve({ place_of_origin: 'Southeastern US' }),
-    } as Response);
-
-    render(<AddPage />);
-    fireEvent.click(screen.getByText('Single Photo'));
-    fireEvent.change(document.querySelector('input[type="file"]')!, {
-      target: { files: [makeFile()] },
+  it('saves and opens the new piece; leaves a pending AI record when nothing was applied', async () => {
+    stubAi({ name: 'AI jar' });
+    renderWithToast(<AddPage />);
+    await addPhoto();
+    continueBtn();
+    await screen.findByText('AI suggestions');
+    fireEvent.change(screen.getByLabelText(/^Name/, { selector: 'input' }), {
+      target: { value: 'My jar' },
     });
-    await screen.findByText('Southeastern US');
-
-    fireEvent.click(screen.getByText('Apply'));
-    expect(screen.getByDisplayValue('Southeastern US')).toBeInTheDocument();
+    continueBtn();
+    continueBtn();
+    mock.queueResult({ data: makeItem({ id: 'n', sku: 'P0040', case_id: null }) });
+    mock.queueResult({});
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(push).toHaveBeenCalledWith('/item/P0040'));
+    const insert = mock.builders.filter((b) => b.insert.mock.calls.length).at(-1)!;
+    expect(insert.insert).toHaveBeenCalledWith(expect.objectContaining({ status: 'pending' }));
+    expect(window.localStorage.getItem(DRAFT_KEY) ?? '').not.toContain('My jar');
   });
 
-  it('creates the piece and redirects to its detail page on submit', async () => {
-    supabaseMock.queueResult({ count: 4 }); // generateSKU
-    supabaseMock.queueResult({ data: { id: 'new-id' }, error: null }); // insert
-
-    render(<AddPage />);
-    fireEvent.click(screen.getByText('Single Photo'));
-    fillRequiredFields();
-    fireEvent.click(screen.getByText('Save Piece'));
-
-    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/item/new-id'));
-  });
-
-  it('shows an error and does not redirect when the insert fails', async () => {
-    supabaseMock.queueResult({ count: 4 });
-    supabaseMock.queueResult({ data: null, error: { message: 'insert failed' } });
-
-    render(<AddPage />);
-    fireEvent.click(screen.getByText('Single Photo'));
-    fillRequiredFields();
-    fireEvent.click(screen.getByText('Save Piece'));
-
-    expect(await screen.findByText('insert failed')).toBeInTheDocument();
-    expect(mockPush).not.toHaveBeenCalled();
-  });
-
-  it('lets the user switch photo mode back to the picker', () => {
-    render(<AddPage />);
-    fireEvent.click(screen.getByText('Multiple Photos'));
-    fireEvent.click(screen.getByText('← Change photo mode'));
-    expect(screen.getByText('How would you like to photograph this piece?')).toBeInTheDocument();
-  });
-
-  it('lets the user add several photos in multi mode and analyze them together', async () => {
-    vi.mocked(global.fetch).mockResolvedValue({
-      json: () => Promise.resolve({ name: 'Multi AI Name' }),
-    } as Response);
-
-    render(<AddPage />);
-    fireEvent.click(screen.getByText('Multiple Photos'));
-    fireEvent.change(document.querySelector('input[type="file"]')!, {
-      target: { files: [makeFile('a.jpg'), makeFile('b.jpg')] },
+  it('lets staff save while the AI is still running and finishes it in the background', async () => {
+    let resolveAi: (r: Response) => void = () => {};
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => new Promise<Response>((r) => (resolveAi = r))),
+    );
+    renderWithToast(<AddPage />);
+    await addPhoto();
+    continueBtn();
+    expect(screen.getByText(/keep going/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/^Name/, { selector: 'input' }), {
+      target: { value: 'Quick save' },
     });
-    expect(await screen.findByText('Analyze 2 Photos with AI')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByText('Analyze 2 Photos with AI'));
-    expect(await screen.findByText('Multi AI Name')).toBeInTheDocument();
-  });
-
-  it('removes a photo from the preview strip', async () => {
-    render(<AddPage />);
-    fireEvent.click(screen.getByText('Multiple Photos'));
-    fireEvent.change(document.querySelector('input[type="file"]')!, {
-      target: { files: [makeFile()] },
-    });
-    await screen.findByText('Analyze 1 Photo with AI');
-
-    fireEvent.click(screen.getByText('×'));
-    expect(screen.queryByText('Analyze 1 Photo with AI')).not.toBeInTheDocument();
-  });
-
-  it('applies all AI suggestions at once', async () => {
-    vi.mocked(global.fetch).mockResolvedValue({
-      json: () => Promise.resolve({ place_of_origin: 'Southeastern US', color: 'Buff' }),
-    } as Response);
-
-    render(<AddPage />);
-    fireEvent.click(screen.getByText('Single Photo'));
-    fireEvent.change(document.querySelector('input[type="file"]')!, {
-      target: { files: [makeFile()] },
-    });
-    await screen.findByText('Southeastern US');
-
-    fireEvent.click(screen.getByText('Apply All'));
-    expect(screen.getByDisplayValue('Southeastern US')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('Buff')).toBeInTheDocument();
-  });
-
-  it('ignores an empty file selection', () => {
-    render(<AddPage />);
-    fireEvent.click(screen.getByText('Single Photo'));
-    fireEvent.change(document.querySelector('input[type="file"]')!, { target: { files: [] } });
-    expect(screen.getByText('Photograph your piece')).toBeInTheDocument();
-  });
-
-  it('applies the description suggestion into the description field', async () => {
-    vi.mocked(global.fetch).mockResolvedValue({
-      json: () => Promise.resolve({ description: 'A fine hand-built vessel.' }),
-    } as Response);
-
-    render(<AddPage />);
-    fireEvent.click(screen.getByText('Single Photo'));
-    fireEvent.change(document.querySelector('input[type="file"]')!, {
-      target: { files: [makeFile()] },
-    });
-    await screen.findByText('A fine hand-built vessel.');
-
-    fireEvent.click(screen.getByText('Apply'));
-    expect(screen.getByDisplayValue('A fine hand-built vessel.')).toBeInTheDocument();
-  });
-
-  it('silently ignores an analysis failure and lets the user continue', async () => {
-    vi.mocked(global.fetch).mockRejectedValue(new Error('network down'));
-
-    render(<AddPage />);
-    fireEvent.click(screen.getByText('Single Photo'));
-    fireEvent.change(document.querySelector('input[type="file"]')!, {
-      target: { files: [makeFile()] },
-    });
-
+    fireEvent.click(screen.getByRole('button', { name: /4\. Review/ }));
+    expect(screen.getByText(/The AI is still running/)).toBeInTheDocument();
+    mock.queueResult({ data: makeItem({ id: 'q', sku: 'P0041', case_id: null }) });
+    fireEvent.click(screen.getByRole('button', { name: 'Save & add next' }));
+    expect(await screen.findByText(/AI results will appear in Review/)).toBeInTheDocument();
+    mock.queueResult({});
+    resolveAi(Response.json({ name: 'Late result' }));
     await waitFor(() =>
-      expect(screen.queryByText('Analyzing your piece with AI...')).not.toBeInTheDocument(),
+      expect(
+        mock.builders.find((b) => b.insert.mock.calls.some((c) => c[0].pottery_id === 'q')),
+      ).toBeTruthy(),
     );
-    expect(screen.queryByText('Photograph your piece')).not.toBeInTheDocument();
   });
 
-  it('re-analyzes in single mode via the re-analyze link', async () => {
-    vi.mocked(global.fetch).mockResolvedValue({
-      json: () => Promise.resolve({ name: 'First Pass' }),
-    } as Response);
-
-    render(<AddPage />);
-    fireEvent.click(screen.getByText('Single Photo'));
-    fireEvent.change(document.querySelector('input[type="file"]')!, {
-      target: { files: [makeFile()] },
-    });
-    await screen.findByText('First Pass');
-
-    vi.mocked(global.fetch).mockResolvedValue({
-      json: () => Promise.resolve({ name: 'Second Pass' }),
-    } as Response);
-    fireEvent.click(screen.getByText('Re-analyze with AI'));
-
-    expect(await screen.findByText('Second Pass')).toBeInTheDocument();
+  it('shows AI errors with a retry, and requires a name before saving', async () => {
+    stubAi({ error: 'Rate limited' }, 429);
+    renderWithToast(<AddPage />);
+    await addPhoto();
+    continueBtn();
+    expect(await screen.findByText('AI analysis failed: Rate limited')).toBeInTheDocument();
+    stubAi({ name: 'Second try' });
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(await screen.findByText('Second try')).toBeInTheDocument();
+    continueBtn();
+    continueBtn();
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText('Name is required')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Identification' })).toBeInTheDocument();
   });
 
-  it('removes a photo from the multi-mode preview strip and re-adds it', async () => {
-    render(<AddPage />);
-    fireEvent.click(screen.getByText('Multiple Photos'));
-    fireEvent.change(document.querySelector('input[type="file"]')!, {
-      target: { files: [makeFile()] },
+  it('reports insert failures without leaving the form', async () => {
+    renderWithToast(<AddPage />);
+    fireEvent.click(screen.getByRole('button', { name: /2\. Details/ }));
+    fireEvent.change(screen.getByLabelText(/^Name/, { selector: 'input' }), {
+      target: { value: 'No photos' },
     });
-    await screen.findByText('Analyze 1 Photo with AI');
-    fireEvent.click(screen.getByText('×'));
-    expect(screen.queryByText('Analyze 1 Photo with AI')).not.toBeInTheDocument();
-
-    fireEvent.change(document.querySelector('input[type="file"]')!, {
-      target: { files: [makeFile(), makeFile('b.jpg')] },
-    });
-    expect(await screen.findByText('Analyze 2 Photos with AI')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /4\. Review/ }));
+    expect(screen.getAllByText('Not set').length).toBeGreaterThan(0);
+    mock.queueResult({ error: { message: 'duplicate key' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText('duplicate key')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Name' }));
+    expect(screen.getByLabelText(/^Name/, { selector: 'input' })).toHaveValue('No photos');
   });
 
-  it('resizes a portrait-oriented photo (height greater than width)', async () => {
-    class TallImage {
-      onload: (() => void) | null = null;
-      width = 100;
-      height = 300;
-      private _src = '';
-      set src(v: string) {
-        this._src = v;
-        queueMicrotask(() => this.onload?.());
-      }
-      get src() {
-        return this._src;
-      }
-    }
-    vi.stubGlobal('Image', TallImage);
-    vi.mocked(global.fetch).mockResolvedValue({
-      json: () => Promise.resolve({ name: 'Portrait' }),
-    } as Response);
-
-    render(<AddPage />);
-    fireEvent.click(screen.getByText('Single Photo'));
-    fireEvent.change(document.querySelector('input[type="file"]')!, {
-      target: { files: [makeFile()] },
+  it('reports follow-up failures after the piece exists', async () => {
+    renderWithToast(<AddPage />);
+    fireEvent.click(screen.getByRole('button', { name: /2\. Details/ }));
+    fireEvent.change(screen.getByLabelText(/^Name/, { selector: 'input' }), {
+      target: { value: 'Jar' },
     });
-
-    expect(await screen.findByText('Portrait')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /3\. Location/ }));
+    fireEvent.change(screen.getByLabelText(/^Display case/), { target: { value: 'A' } });
+    fireEvent.change(screen.getByLabelText('Acquisition cost ($)'), { target: { value: '10' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    mock.queueResult({ data: saved });
+    mock.queueResult({ error: { message: 'rls' } });
+    mock.queueResult({ error: { message: 'fk' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(
+      await screen.findByText('Saved P0036, but: private fields: rls; case history: fk'),
+    ).toBeInTheDocument();
   });
 
-  it('fills in all optional Details, Acquisition, and Research fields', async () => {
-    supabaseMock.queueResult({ count: 4 });
-    supabaseMock.queueResult({ data: { id: 'new-id' }, error: null });
-
-    render(<AddPage />);
-    fireEvent.click(screen.getByText('Single Photo'));
-    fillRequiredFields();
-
-    const detailsInputs = screen.getByText('Details').closest('section')!.querySelectorAll('input');
-    fireEvent.change(detailsInputs[0], { target: { value: 'Ceremonial' } }); // use_function
-    fireEvent.change(detailsInputs[1], { target: { value: 'Mississippian' } }); // tribe_culture
-    fireEvent.change(detailsInputs[2], { target: { value: '8"H' } }); // dimensions
-    const detailsSelects = screen
-      .getByText('Details')
-      .closest('section')!
-      .querySelectorAll('select');
-    fireEvent.change(detailsSelects[0], { target: { value: 'A' } }); // case_id
-    fireEvent.change(detailsSelects[1], { target: { value: 'Good' } }); // condition
-    fireEvent.change(detailsSelects[2], { target: { value: 'Rare' } }); // rarity
-    fireEvent.change(detailsSelects[3], { target: { value: 'Reproduction' } }); // originality
-
-    const acqInputs = screen.getByText('Acquisition').closest('section')!.querySelectorAll('input');
-    fireEvent.change(acqInputs[0], { target: { value: '2020-01-01' } }); // date_acquired
-    fireEvent.change(acqInputs[1], { target: { value: 'Estate Sale' } }); // location_acquired
-    fireEvent.change(acqInputs[2], { target: { value: 'Jane Doe' } }); // seller_donator
-    fireEvent.change(acqInputs[3], { target: { value: 'Private collection' } }); // provenance
-    fireEvent.change(acqInputs[4], { target: { value: '100' } }); // acquisition_cost
-    fireEvent.change(acqInputs[5], { target: { value: '250' } }); // appraised_value
-
-    const researchSection = screen.getByText('Research').closest('section')!;
-    fireEvent.change(researchSection.querySelector('input')!, { target: { value: 'Smithsonian' } }); // museums_comparable
-    fireEvent.change(researchSection.querySelector('textarea')!, {
-      target: { value: 'Needs more research' },
+  it('waits for uploads before saving', async () => {
+    renderWithToast(<AddPage />);
+    fireEvent.click(screen.getByRole('button', { name: /2\. Details/ }));
+    fireEvent.change(screen.getByLabelText(/^Name/, { selector: 'input' }), {
+      target: { value: 'Jar' },
     });
-
-    fireEvent.change(screen.getByPlaceholderText('AI-generated or written description...'), {
-      target: { value: 'A hand-written description.' },
-    });
-
-    fireEvent.click(screen.getByText('Save Piece'));
-    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/item/new-id'));
+    fireEvent.click(screen.getByRole('button', { name: /1\. Photos/ }));
+    queueUpload();
+    fireEvent.change(screen.getByLabelText('Choose photos'), { target: { files: [makeFile()] } });
+    expect(screen.getByRole('button', { name: 'Uploading…' })).toBeDisabled();
+    await screen.findByAltText('Photo 1');
   });
 
-  it('actually resizes an oversized photo before analyzing', async () => {
-    class HugeImage {
-      onload: (() => void) | null = null;
-      width = 3000;
-      height = 2000;
-      private _src = '';
-      set src(v: string) {
-        this._src = v;
-        queueMicrotask(() => this.onload?.());
-      }
-      get src() {
-        return this._src;
-      }
-    }
-    vi.stubGlobal('Image', HugeImage);
-    vi.mocked(global.fetch).mockResolvedValue({
-      json: () => Promise.resolve({ name: 'Resized OK' }),
-    } as Response);
-
-    render(<AddPage />);
-    fireEvent.click(screen.getByText('Single Photo'));
-    fireEvent.change(document.querySelector('input[type="file"]')!, {
-      target: { files: [makeFile()] },
-    });
-
-    expect(await screen.findByText('Resized OK')).toBeInTheDocument();
-  });
-
-  it('does not surface suggestions when the API responds with an error field', async () => {
-    vi.mocked(global.fetch).mockResolvedValue({
-      json: () => Promise.resolve({ error: 'Analysis failed' }),
-    } as Response);
-
-    render(<AddPage />);
-    fireEvent.click(screen.getByText('Single Photo'));
-    fireEvent.change(document.querySelector('input[type="file"]')!, {
-      target: { files: [makeFile()] },
-    });
-
-    await waitFor(() =>
-      expect(screen.queryByText('Analyzing your piece with AI...')).not.toBeInTheDocument(),
+  it('restores a saved draft and can run the analysis from Details', async () => {
+    window.localStorage.setItem(
+      DRAFT_KEY,
+      JSON.stringify({
+        folder: 'intake/old',
+        step: 1,
+        pairs: [
+          { photo: `${STORAGE}/intake/old/a.jpg`, thumb: `${STORAGE}/intake/old/thumbs/a.jpg` },
+        ],
+        form: {
+          ...JSON.parse(JSON.stringify({ name: 'Draft jar' })),
+          culture_id: '',
+          region: '',
+          period_start_year: null,
+          period_end_year: null,
+          age: '',
+          place_of_origin: '',
+          tribe_culture: '',
+          color: '',
+          use_function: '',
+          dimensions: '',
+          condition: '',
+          rarity: '',
+          originality: '',
+          case_id: '',
+          date_acquired: '',
+          location_acquired: '',
+          provenance: '',
+          museums_comparable: '',
+          research_notes: '',
+          description: '',
+        },
+        privateForm: {
+          acquisition_cost: '',
+          appraised_value: '',
+          appraisal_date: '',
+          appraiser_name: '',
+          seller_donator: '',
+        },
+        aiFields: [],
+        context: '',
+        analysis: null,
+        applied: [],
+      }),
     );
-    expect(screen.queryByText('AI Suggestions')).not.toBeInTheDocument();
+    stubAi({ name: 'From draft' });
+    renderWithToast(<AddPage />);
+    expect(await screen.findByText('Restored your unsaved piece')).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Name/, { selector: 'input' })).toHaveValue('Draft jar');
+    fireEvent.click(screen.getByRole('button', { name: 'Analyze 1 photo with AI' }));
+    expect(await screen.findByText('From draft')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.getByAltText('Photo 1')).toBeInTheDocument();
   });
 
-  it('skips falsy suggestion values when applying all', async () => {
-    vi.mocked(global.fetch).mockResolvedValue({
-      json: () => Promise.resolve({ name: 'Has Value', condition: '' }),
-    } as Response);
-
-    render(<AddPage />);
-    fireEvent.click(screen.getByText('Single Photo'));
-    fireEvent.change(document.querySelector('input[type="file"]')!, {
-      target: { files: [makeFile()] },
-    });
-    await screen.findByText('Has Value');
-
-    fireEvent.click(screen.getByText('Apply All'));
-    expect(screen.getByDisplayValue('Has Value')).toBeInTheDocument();
+  it('removes photos immediately and discards the whole draft', async () => {
+    renderWithToast(<AddPage />);
+    await addPhoto();
+    mock.queueResult({});
+    fireEvent.click(screen.getByRole('button', { name: 'Remove photo 1' }));
+    expect(mock.bucket.remove).toHaveBeenCalledWith(['intake/x/a.jpg', 'intake/x/thumbs/a.jpg']);
+    await addPhoto();
+    const confirm = vi
+      .spyOn(window, 'confirm')
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Discard' }));
+    expect(screen.getByAltText('Photo 1')).toBeInTheDocument();
+    mock.queueResult({ error: { message: 'gone' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Discard' }));
+    await waitFor(() => expect(screen.queryByAltText('Photo 1')).not.toBeInTheDocument());
+    expect(confirm).toHaveBeenCalledTimes(2);
   });
 
-  it('defaults the SKU counter to 0 when count comes back undefined', async () => {
-    supabaseMock.queueResult({}); // count undefined
-    supabaseMock.queueResult({ data: { id: 'sku-0' }, error: null });
-
-    render(<AddPage />);
-    fireEvent.click(screen.getByText('Single Photo'));
-    fillRequiredFields();
-    fireEvent.click(screen.getByText('Save Piece'));
-
-    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/item/sku-0'));
-  });
-
-  it('surfaces a storage upload error without inserting the piece', async () => {
-    supabaseMock.queueResult({ count: 4 });
-    supabaseMock.queueResult({ error: { message: 'upload failed' } });
-
-    render(<AddPage />);
-    fireEvent.click(screen.getByText('Multiple Photos'));
-    fireEvent.change(document.querySelector('input[type="file"]')!, {
-      target: { files: [makeFile()] },
-    });
-    await waitFor(() => expect(document.querySelectorAll('img').length).toBeGreaterThan(0));
-    fillRequiredFields();
-    fireEvent.click(screen.getByText('Save Piece'));
-
-    expect(await screen.findByText('upload failed')).toBeInTheDocument();
-    expect(mockPush).not.toHaveBeenCalled();
-  });
-
-  it('falls back to a generic error message when the insert error has no message', async () => {
-    supabaseMock.queueResult({ count: 4 });
-    supabaseMock.queueResult({ data: null, error: {} });
-
-    render(<AddPage />);
-    fireEvent.click(screen.getByText('Single Photo'));
-    fillRequiredFields();
-    fireEvent.click(screen.getByText('Save Piece'));
-
-    expect(await screen.findByText('Something went wrong')).toBeInTheDocument();
-  });
-
-  it('uploads attached photos to storage before inserting the piece', async () => {
-    vi.mocked(global.fetch).mockResolvedValue({ json: () => Promise.resolve({}) } as Response);
-    supabaseMock.queueResult({ count: 4 }); // generateSKU
-    supabaseMock.queueResult({ error: null }); // storage.upload
-    supabaseMock.queueResult({ data: { publicUrl: 'https://cdn.example.com/p0005/1.jpg' } }); // getPublicUrl
-    supabaseMock.queueResult({ data: { id: 'new-id' }, error: null }); // insert
-
-    render(<AddPage />);
-    fireEvent.click(screen.getByText('Multiple Photos'));
-    fireEvent.change(document.querySelector('input[type="file"]')!, {
-      target: { files: [makeFile()] },
-    });
-    await waitFor(() => expect(document.querySelectorAll('img').length).toBeGreaterThan(0));
-    fillRequiredFields();
-    fireEvent.click(screen.getByText('Save Piece'));
-
-    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/item/new-id'));
-    expect(supabaseMock.supabase.storage.from).toHaveBeenCalledWith('pottery-photos');
+  it('allows jumping between steps freely', () => {
+    renderWithToast(<AddPage />);
+    fireEvent.click(screen.getByRole('button', { name: /3\. Location/ }));
+    expect(screen.getByRole('heading', { name: 'Location & acquisition' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /3\. Location/ })).toHaveAttribute(
+      'aria-current',
+      'step',
+    );
   });
 });

@@ -1,23 +1,86 @@
 @import 'tailwindcss';
 
-:root {
-  --background: #f9f9f9;
-  --foreground: #111111;
-  --border: #e5e5e5;
-  --muted: #6b6b6b;
-  --card: #ffffff;
+@theme {
+  --color-canvas: #faf8f5;
+  --color-surface: #ffffff;
+  --color-sunken: #f3efe9;
+  --color-line: #e8e2d9;
+  --color-line-strong: #cbc1b2;
+  --color-ink: #1c1917;
+  --color-ink-soft: #44403c;
+  --color-muted: #6f6862;
+  --color-faint: #a39b93;
+  --color-accent: #a4472a;
+  --color-accent-strong: #84361f;
+  --color-accent-soft: #f6e9e2;
+  --color-success: #2f7d4f;
+  --color-success-soft: #e6f3ea;
+  --color-warn: #9a5b06;
+  --color-warn-soft: #fdf3e1;
+  --color-danger: #b42318;
+  --color-danger-soft: #fdecea;
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-display: var(--font-fraunces), ui-serif, Georgia, serif;
+
+  --animate-fade-in: fade-in 0.25s ease-out both;
+  --animate-rise: rise 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-sheet-up: sheet-up 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @keyframes sheet-up {
+    from {
+      transform: translateY(24px);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
-  overscroll-behavior: none;
+  overscroll-behavior-y: none;
 }
 
 * {
   -webkit-tap-highlight-color: transparent;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* Safe area utilities for notch / home indicator */
@@ -33,5 +96,14 @@ body {
 
 /* Bottom nav height + safe area */
 .pb-nav {
-  padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+}
+
+@media print {
+  body {
+    background: white;
+  }
+  @page {
+    margin: 14mm;
+  }
 }

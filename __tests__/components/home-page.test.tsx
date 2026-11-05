@@ -1,368 +1,368 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '../support/render';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { fireEvent, renderWithToast, screen, waitFor, within } from '../support/render';
 import { createSupabaseMock } from '../support/supabaseMock';
-import type { PotteryItem } from '@/lib/types';
+import { makeSummary } from '../support/fixtures';
 
-vi.mock('next/navigation', () => ({ usePathname: () => '/' }));
+let searchParams = new URLSearchParams();
+const replace = vi.fn();
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ replace, push: vi.fn(), refresh: vi.fn() }),
+  useSearchParams: () => searchParams,
+  usePathname: () => '/',
+}));
 vi.mock('@/lib/supabase', () => ({ createClient: vi.fn() }));
 vi.mock('@/components/InventoryMap', () => ({
-  default: ({
-    onEditPiece,
-    items,
-  }: {
-    onEditPiece: (item: PotteryItem) => void;
-    items: PotteryItem[];
-  }) => (
-    <div>
-      Map view
-      {items[0] && <button onClick={() => onEditPiece(items[0])}>Edit via map</button>}
-    </div>
-  ),
+  default: ({ items }: { items: unknown[] }) => <p>map view {items.length}</p>,
 }));
-vi.mock('@/components/InventoryTree', () => ({ default: () => <div>Tree view</div> }));
-vi.mock('@/components/InventoryCase', () => ({ default: () => <div>Case view</div> }));
-vi.mock('@/components/PieceModal', () => ({
-  default: ({
-    onClose,
-    onSaved,
-  }: {
-    onClose: () => void;
-    onSaved: (item: PotteryItem) => void;
-  }) => (
-    <div>
-      Piece modal
-      <button onClick={onClose}>Close modal</button>
-      <button onClick={() => onSaved({ id: 'saved-1', name: 'Saved Piece' } as PotteryItem)}>
-        Save from modal
-      </button>
-      <button onClick={() => onSaved({ id: 'a', name: 'Updated In Place' } as PotteryItem)}>
-        Save existing from modal
-      </button>
-    </div>
-  ),
+vi.mock('@/components/InventoryTimeline', () => ({
+  default: ({ items }: { items: unknown[] }) => <p>timeline view {items.length}</p>,
+}));
+vi.mock('@/components/InventoryTree', () => ({
+  default: ({ items }: { items: unknown[] }) => <p>tree view {items.length}</p>,
+}));
+vi.mock('@/components/InventoryCase', () => ({
+  default: ({ items }: { items: unknown[] }) => <p>case view {items.length}</p>,
 }));
 
 import { createClient } from '@/lib/supabase';
-import HomePage from '@/app/page';
+import HomePage from '@/app/(public)/page';
 
-const supabaseMock = createSupabaseMock();
+const mock = createSupabaseMock();
 vi.mocked(createClient).mockReturnValue(
-  supabaseMock.supabase as unknown as ReturnType<typeof createClient>,
+  mock.supabase as unknown as ReturnType<typeof createClient>,
 );
 
-function makeItem(overrides: Partial<PotteryItem>): PotteryItem {
-  return {
-    id: 'id-1',
-    sku: 'P0001',
-    date_entered: '2026-01-01',
-    date_acquired: null,
-    location_acquired: null,
-    name: 'Mississippian Bowl',
-    use_function: null,
-    place_of_origin: 'North America',
-    age: '800 CE',
-    dimensions: null,
+const items = [
+  makeSummary({ id: '1', sku: 'P0001', name: 'Cahokia jar' }),
+  makeSummary({
+    id: '2',
+    sku: 'P0002',
+    name: 'Maya plate',
+    culture_id: 'maya',
+    region: 'Mesoamerica',
+    period_start_year: -300,
+    period_end_year: 250,
+    case_id: 'A',
+  }),
+];
+const statRows = [
+  {
+    culture_id: 'mississippian',
     tribe_culture: null,
-    appraised_value: null,
-    acquisition_cost: null,
-    color: 'Brown',
-    rarity: null,
-    museums_comparable: null,
-    location_in_case: null,
-    case_id: null,
-    condition: 'Good',
-    originality: null,
-    seller_donator: null,
-    provenance: null,
-    appraisal_date: null,
-    appraiser_name: null,
-    status: 'Active',
-    research_notes: null,
-    description: null,
-    photos: [],
-    created_at: '2026-01-01',
-    ...overrides,
-  };
+    region: 'North America',
+    period_start_year: 1050,
+    period_end_year: 1200,
+  },
+  {
+    culture_id: null,
+    tribe_culture: 'Maya',
+    region: null,
+    period_start_year: null,
+    period_end_year: -300,
+  },
+  {
+    culture_id: null,
+    tribe_culture: null,
+    region: null,
+    period_start_year: null,
+    period_end_year: null,
+  },
+];
+
+function load(page = { data: items, count: 2 }, stats: unknown[] | null = statRows) {
+  mock.queueResult(page);
+  mock.queueResult(stats ? { data: stats } : { error: { message: 'x' } });
 }
 
-describe('HomePage', () => {
-  beforeEach(() => {
-    supabaseMock.reset();
+beforeEach(() => {
+  mock.reset();
+  replace.mockClear();
+  searchParams = new URLSearchParams();
+});
+afterEach(() => vi.unstubAllGlobals());
+
+describe('Catalog home page', () => {
+  it('shows the hero with collection stats and the first page of pieces', async () => {
+    load();
+    renderWithToast(<HomePage />);
+    expect(await screen.findByText('Cahokia jar')).toBeInTheDocument();
+    expect(screen.getByText('2 pieces')).toBeInTheDocument();
+    const stats = await screen.findByText('Cultures', { selector: 'dt' });
+    expect(stats.nextSibling).toHaveTextContent('2');
+    expect(screen.getByText('300 BCE – 1200 CE')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Mesoamerica/ }));
+    expect(replace).toHaveBeenCalledWith('/?region=Mesoamerica', { scroll: false });
   });
 
-  it('loads and renders items in grid view', async () => {
-    supabaseMock.queueResult({ data: [makeItem({ id: 'a', name: 'Mississippian Bowl' })] }); // fetchItems
-    supabaseMock.queueResult({ data: [] }); // fetchDynamicOptions
-
-    render(<HomePage />);
-
-    expect(await screen.findByText('Mississippian Bowl')).toBeInTheDocument();
+  it('hides hero stats when they cannot load', async () => {
+    load({ data: items, count: 2 }, null);
+    renderWithToast(<HomePage />);
+    await screen.findByText('Cahokia jar');
+    expect(screen.queryByText('Cultures', { selector: 'dt' })).not.toBeInTheDocument();
   });
 
-  it('filters items by the search box', async () => {
-    supabaseMock.queueResult({
-      data: [
-        makeItem({ id: 'a', name: 'Mississippian Bowl', sku: 'P0001' }),
-        makeItem({ id: 'b', name: 'Maya Vase', sku: 'P0002' }),
-      ],
-    });
-    supabaseMock.queueResult({ data: [] });
-
-    render(<HomePage />);
-    await screen.findByText('Mississippian Bowl');
-
-    fireEvent.change(screen.getByPlaceholderText('Search name, SKU, origin, color...'), {
-      target: { value: 'maya' },
-    });
-
-    expect(screen.queryByText('Mississippian Bowl')).not.toBeInTheDocument();
-    expect(screen.getByText('Maya Vase')).toBeInTheDocument();
+  it('debounces search into the URL', async () => {
+    load();
+    renderWithToast(<HomePage />);
+    await screen.findByText('Cahokia jar');
+    fireEvent.change(screen.getByLabelText('Search the collection'), { target: { value: 'jar' } });
+    await waitFor(() => expect(replace).toHaveBeenCalledWith('/?q=jar', { scroll: false }));
   });
 
-  it('shows an empty state when there are no pieces', async () => {
-    supabaseMock.queueResult({ data: [] });
-    supabaseMock.queueResult({ data: [] });
-
-    render(<HomePage />);
-
-    expect(await screen.findByText('No pieces found.')).toBeInTheDocument();
+  it('loads more pages on demand', async () => {
+    load({ data: items, count: 3 });
+    renderWithToast(<HomePage />);
+    const more = await screen.findByRole('button', { name: 'Load 1 more' });
+    mock.queueResult({ data: [makeSummary({ id: '3', sku: 'P0003', name: 'Third' })], count: 3 });
+    fireEvent.click(more);
+    expect(await screen.findByText('Third')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Load/ })).not.toBeInTheDocument();
   });
 
-  it('switches to map, tree, and case views', async () => {
-    supabaseMock.queueResult({ data: [] });
-    supabaseMock.queueResult({ data: [] });
-
-    render(<HomePage />);
-    await screen.findByText('No pieces found.');
-
-    fireEvent.click(screen.getByText('Map'));
-    expect(await screen.findByText('Map view')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByText('Tree'));
-    expect(await screen.findByText('Tree view')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Cases' }));
-    expect(await screen.findByText('Case view')).toBeInTheDocument();
+  it('shows an error with a retry', async () => {
+    mock.queueResult({ error: { message: 'offline' } });
+    mock.queueResult({ data: [] });
+    renderWithToast(<HomePage />);
+    expect(await screen.findByText('offline')).toBeInTheDocument();
+    mock.queueResult({ data: items, count: 2 });
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(await screen.findByText('Cahokia jar')).toBeInTheDocument();
   });
 
-  it('shows Sign In for anonymous users and Add Piece / Sign Out for staff', async () => {
-    supabaseMock.setUser({ id: 'staff-1' });
-    supabaseMock.queueResult({ data: [] });
-    supabaseMock.queueResult({ data: [] });
-
-    render(<HomePage />);
-
-    expect(await screen.findByText('+ Add Piece')).toHaveAttribute('href', '/add');
-    expect(screen.getByText('Sign Out')).toBeInTheDocument();
-    expect(screen.queryByText('Sign In')).not.toBeInTheDocument();
+  it('explains empty results and clears filters', async () => {
+    searchParams = new URLSearchParams('region=Europe&q=zzz&sort=sku&view=grid&archived=1');
+    load({ data: [], count: 0 });
+    renderWithToast(<HomePage />);
+    expect(await screen.findByText('No pieces found')).toBeInTheDocument();
+    expect(screen.queryByText('Pottery from across the ancient world')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+    expect(replace).toHaveBeenCalledWith('/?sort=sku', { scroll: false });
   });
 
-  it('signs out and redirects to /login', async () => {
-    const originalLocation = window.location;
-    Object.defineProperty(window, 'location', {
-      configurable: true,
-      value: { ...originalLocation, href: '' },
-    });
-
-    supabaseMock.setUser({ id: 'staff-1' });
-    supabaseMock.queueResult({ data: [] });
-    supabaseMock.queueResult({ data: [] });
-
-    render(<HomePage />);
-    fireEvent.click(await screen.findByText('Sign Out'));
-
-    await waitFor(() => expect(supabaseMock.supabase.auth.signOut).toHaveBeenCalled());
-    await waitFor(() => expect(window.location.href).toBe('/login'));
-
-    Object.defineProperty(window, 'location', { configurable: true, value: originalLocation });
+  it('says the collection is empty when there are no filters', async () => {
+    load({ data: [], count: 0 }, []);
+    renderWithToast(<HomePage />);
+    expect(await screen.findByText('The collection is empty.')).toBeInTheDocument();
   });
 
-  it('opens the filter panel and applies a filter, updating the active count', async () => {
-    supabaseMock.queueResult({
-      data: [
-        makeItem({ id: 'a', condition: 'Good' }),
-        makeItem({ id: 'b', name: 'Maya Vase', condition: 'Poor' }),
-      ],
-    });
-    supabaseMock.queueResult({ data: [] });
-    supabaseMock.queueResult({ data: [makeItem({ id: 'a', condition: 'Good' })] }); // refetch on filter change
-
-    render(<HomePage />);
-    await screen.findByText('Mississippian Bowl');
-
-    fireEvent.click(screen.getByText('Filters'));
-    const conditionSelects = screen.getAllByDisplayValue('All');
-    fireEvent.change(conditionSelects[0], { target: { value: 'Good' } });
-
-    expect(screen.getAllByText('1').length).toBeGreaterThan(0);
-  });
-
-  it('toggles sort order and clears filters from the mobile pills', async () => {
-    const item = makeItem({ id: 'a', condition: 'Good' });
-    supabaseMock.queueResult({ data: [item] }); // initial fetchItems
-    supabaseMock.queueResult({ data: [] }); // fetchDynamicOptions
-    supabaseMock.queueResult({ data: [item] }); // refetch on sort change
-    supabaseMock.queueResult({ data: [item] }); // refetch on filter change
-    supabaseMock.queueResult({ data: [item] }); // refetch on clear filters
-
-    render(<HomePage />);
-    await screen.findByText('Mississippian Bowl');
-
-    fireEvent.click(screen.getByText('Oldest first'));
-    fireEvent.click(screen.getByText('Filters'));
-    fireEvent.change(screen.getAllByDisplayValue('All')[0], { target: { value: 'Good' } });
-    fireEvent.click(screen.getByText('Clear filters'));
-
-    expect(screen.queryByText('Clear filters')).not.toBeInTheDocument();
-  });
-
-  it('opens the quick-edit modal from a non-grid view and closes it', async () => {
-    supabaseMock.queueResult({ data: [makeItem({ id: 'a', name: 'Mississippian Bowl' })] });
-    supabaseMock.queueResult({ data: [] });
-
-    render(<HomePage />);
-    await screen.findByText('Mississippian Bowl');
-
-    fireEvent.click(screen.getByText('Map'));
-    fireEvent.click(await screen.findByText('Edit via map'));
-    expect(await screen.findByText('Piece modal')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByText('Close modal'));
-    expect(screen.queryByText('Piece modal')).not.toBeInTheDocument();
-  });
-
-  it('applies every filter field, exercising both eq and ilike query branches', async () => {
-    const item = makeItem({ id: 'a' });
-    supabaseMock.queueResult({ data: [item] }); // initial fetchItems
-    supabaseMock.queueResult({
-      data: [
-        {
-          place_of_origin: 'TestOrigin',
-          color: 'Red',
-          use_function: 'Cooking',
-          tribe_culture: 'TestCulture',
-          location_acquired: 'TestLoc',
-          location_in_case: 'TestCase',
-          seller_donator: 'TestSeller',
-          age: '900 CE',
-        },
-      ],
-    }); // fetchDynamicOptions
-    for (let i = 0; i < 20; i++) supabaseMock.queueResult({ data: [item] }); // one refetch per filter change
-
-    render(<HomePage />);
-    await screen.findByText('Mississippian Bowl');
-    fireEvent.click(screen.getByText('Filters'));
-
-    const selects = screen.getAllByDisplayValue('All');
-    const values = [
-      'Good',
-      'Rare',
-      'Reproduction',
-      'TestOrigin',
-      'Red',
-      'Cooking',
-      'TestCulture',
-      '900 CE',
-      'TestLoc',
-      'TestCase',
-      'TestSeller',
-    ];
-    for (let i = 0; i < values.length; i++) {
-      fireEvent.change(selects[i], { target: { value: values[i] } });
-    }
-
-    await waitFor(() =>
-      expect(screen.getAllByText(String(values.length)).length).toBeGreaterThan(0),
+  it('removes individual filter chips', async () => {
+    searchParams = new URLSearchParams(
+      'region=North America&culture=mississippian&from=-1000&to=1&condition=Good&rarity=Rare&originality=Unknown&case=none&review=1&archived=1',
     );
+    load();
+    renderWithToast(<HomePage />);
+    await screen.findByText('Cahokia jar');
+    expect(screen.getByText('1000 BCE – 1 CE')).toBeInTheDocument();
+    expect(screen.getByText('Unassigned')).toBeInTheDocument();
+    expect(screen.getByText(/\(archived\)/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Remove filter North America' }));
+    expect(replace.mock.calls.at(-1)?.[0]).not.toContain('region=');
+    expect(replace.mock.calls.at(-1)?.[0]).not.toContain('culture=');
+    fireEvent.click(screen.getByRole('button', { name: 'Remove filter Needs review' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Clear all' }));
+    expect(replace).toHaveBeenLastCalledWith('/', { scroll: false });
   });
 
-  it('changes sort order via the desktop select', async () => {
-    const item = makeItem({ id: 'a' });
-    supabaseMock.queueResult({ data: [item] });
-    supabaseMock.queueResult({ data: [] });
-    supabaseMock.queueResult({ data: [item] }); // refetch on sort change
-
-    render(<HomePage />);
-    await screen.findByText('Mississippian Bowl');
-    fireEvent.change(screen.getByDisplayValue('Newest First'), { target: { value: 'oldest' } });
-
-    await waitFor(() => expect(screen.getByDisplayValue('Oldest First')).toBeInTheDocument());
+  it.each([
+    ['from=500', 'After 500 CE'],
+    ['to=-200', 'Before 200 BCE'],
+    ['case=A', 'A — Left Tower'],
+  ])('labels the %s chip', async (qs, label) => {
+    searchParams = new URLSearchParams(qs);
+    load();
+    renderWithToast(<HomePage />);
+    expect(
+      await screen.findByRole('button', { name: `Remove filter ${label}` }),
+    ).toBeInTheDocument();
   });
 
-  it('closes the mobile filter sheet via backdrop, close button, and done', async () => {
-    supabaseMock.queueResult({ data: [] });
-    supabaseMock.queueResult({ data: [] });
-
-    const { container } = render(<HomePage />);
-    await screen.findByText('No pieces found.');
-
-    fireEvent.click(screen.getByText('Filters'));
-    fireEvent.click(container.querySelector('.absolute.inset-0.bg-black\\/40')!);
-    expect(screen.queryByText('Filter by')).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByText('Filters'));
-    fireEvent.click(screen.getByText('×'));
-    expect(screen.queryByText('Filter by')).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByText('Filters'));
-    fireEvent.click(screen.getByText('Done'));
-    expect(screen.queryByText('Filter by')).not.toBeInTheDocument();
-  });
-
-  it('prepends a newly-saved piece that does not already exist', async () => {
-    supabaseMock.queueResult({ data: [makeItem({ id: 'a', name: 'Mississippian Bowl' })] });
-    supabaseMock.queueResult({ data: [] });
-
-    render(<HomePage />);
-    await screen.findByText('Mississippian Bowl');
-
-    fireEvent.click(screen.getByText('Map'));
-    fireEvent.click(await screen.findByText('Edit via map'));
-    fireEvent.click(await screen.findByText('Save from modal'));
-
-    expect(screen.queryByText('Piece modal')).not.toBeInTheDocument();
-  });
-
-  it('replaces an existing item in place when the saved piece already exists', async () => {
-    supabaseMock.queueResult({ data: [makeItem({ id: 'a', name: 'Mississippian Bowl' })] });
-    supabaseMock.queueResult({ data: [] });
-
-    render(<HomePage />);
-    await screen.findByText('Mississippian Bowl');
-
-    fireEvent.click(screen.getByText('Map'));
-    fireEvent.click(await screen.findByText('Edit via map'));
-    fireEvent.click(await screen.findByText('Save existing from modal'));
-    fireEvent.click(screen.getByText('Grid'));
-
-    expect(await screen.findByText('Updated In Place')).toBeInTheDocument();
-    expect(screen.queryByText('Mississippian Bowl')).not.toBeInTheDocument();
-  });
-
-  it('handles fetchDynamicOptions returning no rows', async () => {
-    supabaseMock.queueResult({ data: [makeItem({ id: 'a' })] });
-    supabaseMock.queueResult({ data: null });
-
-    render(<HomePage />);
-    expect(await screen.findByText('Mississippian Bowl')).toBeInTheDocument();
-  });
-
-  it('marks the first three newest items as recent', async () => {
-    supabaseMock.queueResult({
-      data: [
-        makeItem({ id: 'a', name: 'First' }),
-        makeItem({ id: 'b', name: 'Second' }),
-        makeItem({ id: 'c', name: 'Third' }),
-        makeItem({ id: 'd', name: 'Fourth' }),
-      ],
+  it('opens the filter sheet and applies selections', async () => {
+    load();
+    renderWithToast(<HomePage />);
+    await screen.findByText('Cahokia jar');
+    fireEvent.click(screen.getByRole('button', { name: 'Filters' }));
+    const sheet = screen.getByRole('dialog', { name: 'Filter the collection' });
+    fireEvent.change(within(sheet).getByLabelText('Region'), { target: { value: 'Europe' } });
+    expect(replace).toHaveBeenLastCalledWith('/?region=Europe', { scroll: false });
+    fireEvent.change(within(sheet).getByLabelText('Culture'), { target: { value: 'maya' } });
+    fireEvent.change(within(sheet).getByLabelText('Condition'), { target: { value: 'Good' } });
+    fireEvent.change(within(sheet).getByLabelText('Rarity'), { target: { value: 'Rare' } });
+    fireEvent.change(within(sheet).getByLabelText('Originality'), { target: { value: 'Unknown' } });
+    fireEvent.change(within(sheet).getByLabelText('Display case'), { target: { value: 'none' } });
+    fireEvent.click(within(sheet).getByRole('button', { name: '1 – 1000 CE' }));
+    expect(replace).toHaveBeenLastCalledWith('/?from=1&to=1000', { scroll: false });
+    fireEvent.change(within(sheet).getByLabelText('From', { selector: 'input' }), {
+      target: { value: '300' },
     });
-    supabaseMock.queueResult({ data: [] });
+    expect(replace).toHaveBeenLastCalledWith('/?from=300', { scroll: false });
+    fireEvent.change(within(sheet).getByLabelText('To', { selector: 'input' }), {
+      target: { value: '900' },
+    });
+    expect(within(sheet).queryByText('Staff')).not.toBeInTheDocument();
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Clear all' }));
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Show 2 pieces' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
 
-    render(<HomePage />);
-    await screen.findByText('First');
+  it('toggles an active era preset off and filters cultures by region', async () => {
+    searchParams = new URLSearchParams('from=1&to=1000&region=Oceania');
+    load({ data: items.slice(0, 1), count: 1 });
+    renderWithToast(<HomePage />);
+    await screen.findByText('Cahokia jar');
+    fireEvent.click(screen.getByRole('button', { name: /Filters/ }));
+    const sheet = screen.getByRole('dialog');
+    expect(within(sheet).getByRole('button', { name: 'Show 1 piece' })).toBeInTheDocument();
+    expect(within(within(sheet).getByLabelText('Culture')).getAllByRole('option')).toHaveLength(3);
+    fireEvent.click(within(sheet).getByRole('button', { name: '1 – 1000 CE' }));
+    expect(replace).toHaveBeenLastCalledWith('/?region=Oceania', { scroll: false });
+  });
 
-    expect(screen.getAllByText('New')).toHaveLength(3);
+  it('changes sort and view', async () => {
+    load();
+    renderWithToast(<HomePage />);
+    await screen.findByText('Cahokia jar');
+    fireEvent.change(screen.getByLabelText('Sort'), { target: { value: 'age-asc' } });
+    expect(replace).toHaveBeenLastCalledWith('/?sort=age-asc', { scroll: false });
+    fireEvent.click(screen.getByRole('tab', { name: 'Timeline' }));
+    expect(replace).toHaveBeenLastCalledWith('/?view=timeline', { scroll: false });
+  });
+
+  it.each([
+    ['map', 'map view 2'],
+    ['timeline', 'timeline view 2'],
+    ['tree', 'tree view 2'],
+    ['case', 'case view 2'],
+  ])('renders the %s view from every matching piece', async (view, text) => {
+    searchParams = new URLSearchParams(`view=${view}`);
+    mock.queueResult({ data: items });
+    mock.queueResult({ data: statRows });
+    renderWithToast(<HomePage />);
+    expect(await screen.findByText(text)).toBeInTheDocument();
+    expect(screen.queryByLabelText('Sort')).not.toBeInTheDocument();
+  });
+
+  it('shows a load error for alternate views', async () => {
+    searchParams = new URLSearchParams('view=map');
+    mock.queueResult({ error: { message: 'map failed' } });
+    mock.queueResult({ data: [] });
+    renderWithToast(<HomePage />);
+    expect(await screen.findByText('map failed')).toBeInTheDocument();
+  });
+});
+
+describe('Catalog staff tools', () => {
+  beforeEach(() => mock.setUser({ id: 'staff' }));
+
+  async function selectBoth() {
+    load();
+    renderWithToast(<HomePage />);
+    await screen.findByText('Cahokia jar');
+    fireEvent.click(screen.getByRole('button', { name: 'Select' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Select Cahokia jar' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Select Maya plate' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Select Maya plate' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Select Maya plate' }));
+    expect(screen.getByText('2 selected')).toBeInTheDocument();
+  }
+
+  it('shows staff-only filters', async () => {
+    load();
+    renderWithToast(<HomePage />);
+    await screen.findByText('Cahokia jar');
+    fireEvent.click(screen.getByRole('button', { name: 'Filters' }));
+    fireEvent.click(screen.getByLabelText(/Needs review/));
+    expect(replace).toHaveBeenLastCalledWith('/?review=1', { scroll: false });
+    fireEvent.click(screen.getByLabelText(/Show archived/));
+    expect(replace).toHaveBeenLastCalledWith('/?archived=1', { scroll: false });
+  });
+
+  it('moves selected pieces to a case and logs only real moves', async () => {
+    await selectBoth();
+    fireEvent.change(screen.getByLabelText('Move selected to case'), { target: { value: 'A' } });
+    mock.queueResult({});
+    mock.queueResult({});
+    mock.queueResult({ data: items, count: 2 });
+    fireEvent.click(screen.getByRole('button', { name: 'Move' }));
+    expect(await screen.findByText('Moved 2 to A — Left Tower')).toBeInTheDocument();
+    const insert = mock.builders.find((b) => b.insert.mock.calls.length)!;
+    expect(insert.insert).toHaveBeenCalledWith([
+      { pottery_id: '1', from_case: null, to_case: 'A', moved_by: 'staff' },
+    ]);
+    expect(screen.queryByText('2 selected')).not.toBeInTheDocument();
+  });
+
+  it('reports bulk failures', async () => {
+    await selectBoth();
+    fireEvent.change(screen.getByLabelText('Move selected to case'), { target: { value: 'B' } });
+    mock.queueResult({ error: { message: 'rls denied' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Move' }));
+    expect(await screen.findByText('rls denied')).toBeInTheDocument();
+  });
+
+  it('reports a failed history insert', async () => {
+    await selectBoth();
+    fireEvent.change(screen.getByLabelText('Move selected to case'), { target: { value: 'B' } });
+    mock.queueResult({});
+    mock.queueResult({ error: { message: 'history failed' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Move' }));
+    expect(await screen.findByText('history failed')).toBeInTheDocument();
+  });
+
+  it('skips the history insert when nothing actually moved', async () => {
+    load({ data: [items[1]], count: 1 });
+    renderWithToast(<HomePage />);
+    await screen.findByText('Maya plate');
+    fireEvent.click(screen.getByRole('button', { name: 'Select' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Select Maya plate' }));
+    fireEvent.change(screen.getByLabelText('Move selected to case'), { target: { value: 'A' } });
+    mock.queueResult({});
+    mock.queueResult({ data: [items[1]], count: 1 });
+    fireEvent.click(screen.getByRole('button', { name: 'Move' }));
+    expect(await screen.findByText('Moved 1 to A — Left Tower')).toBeInTheDocument();
+  });
+
+  it('archives after confirmation', async () => {
+    await selectBoth();
+    const confirm = vi
+      .spyOn(window, 'confirm')
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Archive' }));
+    mock.queueResult({});
+    mock.queueResult({ data: [], count: 0 });
+    fireEvent.click(screen.getByRole('button', { name: 'Archive' }));
+    expect(await screen.findByText('Archived 2 pieces')).toBeInTheDocument();
+    expect(confirm).toHaveBeenCalledTimes(2);
+  });
+
+  it('reports archive errors', async () => {
+    await selectBoth();
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    mock.queueResult({ error: { message: 'cannot archive' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Archive' }));
+    expect(await screen.findByText('cannot archive')).toBeInTheDocument();
+  });
+
+  it('queues background AI for selected pieces with photos', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(Response.json({ name: 'x' }))),
+    );
+    await selectBoth();
+    mock.queueResult({});
+    mock.queueResult({});
+    fireEvent.click(screen.getByRole('button', { name: 'Re-run AI' }));
+    expect(await screen.findByText(/Analyzing 2 pieces in the background/)).toBeInTheDocument();
+    await waitFor(() => expect(mock.pending()).toBe(0));
+  });
+
+  it('cancels selection mode', async () => {
+    await selectBoth();
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+    expect(screen.queryByText('2 selected')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Select' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel selection' }));
+    expect(screen.getByRole('link', { name: /Cahokia jar/ })).toBeInTheDocument();
   });
 });

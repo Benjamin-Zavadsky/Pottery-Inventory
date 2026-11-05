@@ -28,6 +28,9 @@ export function stubImageAndCanvas() {
   vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue(
     'data:image/jpeg;base64,ZmFrZQ==',
   );
+  vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation(function (callback) {
+    callback(new Blob(['jpeg'], { type: 'image/jpeg' }));
+  });
 }
 
 export function makeFile(name = 'photo.jpg', type = 'image/jpeg'): File {

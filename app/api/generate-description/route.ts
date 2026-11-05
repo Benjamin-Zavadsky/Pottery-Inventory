@@ -1,7 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
-import { CONDITIONS, RARITIES, ORIGINALITIES } from '@/lib/constants';
+import {
+  CONDITIONS,
+  CULTURES,
+  MAX_PHOTOS,
+  ORIGINALITIES,
+  PHOTO_BUCKET,
+  RARITIES,
+  REGIONS,
+} from '@/lib/constants';
+import { AI_MODEL, CONFIDENCE, normalizeAiResult } from '@/lib/ai';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -17,11 +26,6 @@ async function isAuthenticated(request: NextRequest): Promise<boolean> {
   const { data } = await supabase.auth.getUser(token);
   return data.user !== null;
 }
-
-type ImageInput = {
-  imageBase64: string;
-  mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
-};
 
 const SYSTEM_PROMPT = `You are a specialist in archaeological ceramics with deep expertise in North American Indigenous pottery traditions, pre-Columbian ceramics, and world pottery. You have encyclopedic knowledge of the following traditions and their diagnostic markers. This collection is weighted toward the Americas — prioritize North American, Mesoamerican, and South American attributions when diagnostic features are consistent with more than one region.
 
@@ -144,6 +148,19 @@ CRITICAL ATTRIBUTION RULES:
 7. Express uncertainty with specific reasoning — never make a confident attribution when the evidence is ambiguous. Where sourcing for a specific claim is inherently thinner (e.g., Tairona, the volcanic-temper claim for Greater Nicoya), hedge accordingly rather than stating it with the same confidence as a well-documented tradition like Moche or Mississippian.
 8. Note if the image quality or angle limits your ability to observe key diagnostic features.`;
 
+const CULTURE_LIST = CULTURES.map((c) => `${c.id} = ${c.culture} (${c.region})`).join('\n');
+
+const MAX_CONTEXT_CHARS = 2000;
+
+function parseImageUrls(body: unknown): string[] | null {
+  const prefix = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/${PHOTO_BUCKET}/`;
+  const urls = (body as { imageUrls?: unknown })?.imageUrls;
+  if (!Array.isArray(urls) || urls.length === 0 || urls.length > MAX_PHOTOS) return null;
+  return urls.every((u) => typeof u === 'string' && u.startsWith(prefix) && !u.includes('..'))
+    ? (urls as string[])
+    : null;
+}
+
 function buildTextPrompt(imageCount: number, userContext?: string): string {
   const intro =
     imageCount > 1
@@ -167,16 +184,24 @@ Before filling any field, analyze these diagnostic features:
 
 Write the description field first. Every other field must be a concise extract of facts already stated in the description — do not introduce new observations in the short fields.
 
+CANONICAL CULTURES — "culture_id" must be one of these ids exactly, or null when none fits (then name the tradition in "tribe_culture"):
+${CULTURE_LIST}
+
 Return ONLY a single valid JSON object — no explanation, no markdown, no text before or after:
 
 {
   "description": "Detailed account of this specific piece. Every sentence must state a concrete observable fact — form, surface treatment, decorative motifs, construction technique, paste characteristics, condition, and attribution with reasoning. No filler phrases ('it is worth noting', 'this piece appears to be', 'overall'). No hedging sentences that add no information. State uncertainty directly and specifically when evidence is ambiguous.",
   "name": "Specific name referencing tradition and form. 15 words max.",
+  "culture_id": "One id from the canonical list above, or null.",
+  "region": "One of exactly: ${REGIONS.join(', ')} — or null.",
+  "period_start_year": "Integer year the likely date range begins; negative for BCE (e.g. -800). null if indeterminate.",
+  "period_end_year": "Integer year the likely date range ends; negative for BCE. null if indeterminate.",
+  "confidence": "One of exactly: ${CONFIDENCE.join(', ')} — overall confidence in the attribution.",
   "place_of_origin": "Specific region and tradition from diagnostic features. If ambiguous, name both candidates. 15 words max.",
-  "age": "Date range and cultural period name. 15 words max. null if indeterminate.",
+  "age": "Date range and cultural period name, human-readable. 15 words max. null if indeterminate.",
   "color": "Specific colors of clay body, slip, and decoration as observed. 15 words max.",
   "use_function": "Inferred function based on form and context. 15 words max.",
-  "tribe_culture": "Named cultural tradition or archaeological phase. 15 words max.",
+  "tribe_culture": "Named cultural tradition or archaeological phase, as specific as the evidence allows. 15 words max.",
   "condition": "One of exactly: ${CONDITIONS.join(', ')}",
   "rarity": "One of exactly: ${RARITIES.join(', ')}",
   "originality": "One of exactly: ${ORIGINALITIES.join(', ')}",
@@ -190,36 +215,33 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const body = await request.json();
-
-    // Support both single image (legacy) and multiple images
-    const images: ImageInput[] = body.images ?? [
-      { imageBase64: body.imageBase64, mediaType: body.mediaType },
-    ];
-
-    if (!images.length || !images[0].imageBase64) {
-      return NextResponse.json({ error: 'Missing image data' }, { status: 400 });
+    const body: unknown = await request.json().catch(() => null);
+    const imageUrls = parseImageUrls(body);
+    if (!imageUrls) {
+      return NextResponse.json(
+        { error: `Provide 1–${MAX_PHOTOS} collection photo URLs` },
+        { status: 400 },
+      );
     }
+    const rawContext = (body as { userContext?: unknown }).userContext;
+    const userContext =
+      typeof rawContext === 'string' ? rawContext.slice(0, MAX_CONTEXT_CHARS) : undefined;
 
-    const imageBlocks = images.map((img) => ({
-      type: 'image' as const,
-      source: {
-        type: 'base64' as const,
-        media_type: img.mediaType,
-        data: img.imageBase64,
-      },
-    }));
-
+    // Photos are fetched by Anthropic straight from public storage, so the
+    // request stays tiny regardless of photo count (Vercel caps bodies at 4.5 MB).
     const response = await client.messages.create({
-      model: 'claude-opus-4-7',
+      model: AI_MODEL,
       max_tokens: 4096,
-      system: SYSTEM_PROMPT,
+      system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
       messages: [
         {
           role: 'user',
           content: [
-            ...imageBlocks,
-            { type: 'text', text: buildTextPrompt(images.length, body.userContext) },
+            ...imageUrls.map((url) => ({
+              type: 'image' as const,
+              source: { type: 'url' as const, url },
+            })),
+            { type: 'text', text: buildTextPrompt(imageUrls.length, userContext) },
           ],
         },
       ],
@@ -228,13 +250,10 @@ export async function POST(request: NextRequest) {
     const text = response.content.find((b) => b.type === 'text')?.text ?? '';
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
-      return NextResponse.json({ error: 'Failed to parse response' }, { status: 500 });
+      return NextResponse.json({ error: 'Failed to parse response' }, { status: 502 });
     }
 
-    const result = JSON.parse(jsonMatch[0]);
-    result.research_notes = null;
-
-    return NextResponse.json(result);
+    return NextResponse.json({ ...normalizeAiResult(JSON.parse(jsonMatch[0])), model: AI_MODEL });
   } catch (err) {
     console.error('Claude API error:', err);
     return NextResponse.json({ error: 'Failed to generate description' }, { status: 500 });

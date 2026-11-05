@@ -30,25 +30,39 @@ Pottery Inventory is a professional collection management system for a family-ow
 
 ```
 app/                          # Next.js App Router — all pages and API routes
-  page.tsx                    # Public inventory grid (home page)
-  layout.tsx                  # Root layout — viewport, meta tags, fonts
-  globals.css                 # Tailwind v4 import + safe-area utilities
-  add/
-    page.tsx                  # Add new piece — auth-gated, photo mode picker, AI analysis
-  item/[id]/
-    page.tsx                  # Item detail + edit — public view, edit gated to auth
-  cases/                      # (planned) Case management — inventory by display case
+  layout.tsx                  # Root layout — fonts (Inter/Fraunces), toast provider, viewport
+  globals.css                 # Tailwind v4 import, design tokens (@theme), safe-area utilities
+  (public)/                   # Public catalog (no login)
+    page.tsx                  # Catalog — URL-state filters, paging, grid/map/timeline/cultures/cases views
+    _components/              # Catalog parts: hero, filter sheet, chips, bulk bar
+    item/[id]/                # Piece page (id or SKU) — server metadata + client view/editor
+    cases/                    # Display cases list + case detail
+    login/                    # Staff sign in (?next= return path)
+  (staff)/                    # Staff portal — guarded by proxy.ts + AuthGuard layout
+    add/                      # Step-by-step intake with drafts, background AI, "save & add next"
+    review/                   # Queue of pending AI suggestions / unverified AI fields
+    dashboard/                # Collection health, thumbnail + classification tools, CSV export
+    catalog/print/            # Printable catalog
   api/
     generate-description/
-      route.ts                # Claude vision API — accepts images + user context, returns JSON
+      route.ts                # Claude vision API — accepts storage photo URLs, returns validated JSON
+
+proxy.ts                      # Server-side session check for staff routes
 
 components/                   # Shared React components used across 2+ pages
-  AuthGuard.tsx               # Redirects unauthenticated users away from protected pages
-  BottomNav.tsx               # Mobile-only bottom navigation bar
+  ui/                         # Design-system primitives (Button, Field, Sheet, Lightbox, Toast…)
+  PieceFields.tsx             # Shared piece form sections (intake, edit, review)
+  PhotoManager.tsx            # Upload (resized + thumbnail), reorder, cover, remove
+  Inventory*.tsx              # Map / timeline / culture tree / case views
 
 lib/                          # Shared utilities and configuration
   supabase.ts                 # Supabase browser client factory (createBrowserClient)
-  types.ts                    # TypeScript types — PotteryItem and future shared types
+  types.ts                    # TypeScript types — PotteryItem, PotteryPrivate, summaries
+  constants.ts                # Cases, enums, canonical CULTURES (ids seeded in the cultures table)
+  queries.ts                  # All Supabase reads/writes (paging, filters, optimistic updates)
+  photos.ts / images.ts       # Resize, thumbnail, upload, storage cleanup
+  ai.ts / aiClient.ts         # AI result schema (zod) + client/background analysis
+  pieceForm.ts / taxonomy.ts / period.ts  # Form model, culture matching, year parsing
 
 __tests__/                    # All tests — never colocate test files with source files
   unit/                       # Vitest unit tests — pure functions (resize, validation, SKU)
@@ -77,7 +91,7 @@ supabase-schema.sql           # Canonical DB schema — source of truth for all 
 Always initialize with `useMemo(() => createClient(), [])` inside the component body. Never call `createClient()` at module level, in a `useCallback`, or in a dependency array. Violating this causes infinite re-renders.
 
 **Image handling**
-Always resize images to a maximum of 1568px on the longest side at 85% JPEG quality using canvas before base64 encoding. Never send raw `File` objects or unresized buffers to `/api/generate-description`.
+Always upload photos through `uploadPhoto` in `lib/photos.ts` — it re-encodes a 2048px display JPEG plus a 480px thumbnail (stripping EXIF/GPS) and stores both URLs (`photos[]` / `thumbs[]`). `/api/generate-description` takes storage URLs (`imageUrls`), never base64 — Anthropic fetches them directly, so the Vercel 4.5MB body limit never applies. Grids and lists render thumbnails, never full photos.
 
 **Error handling**
 Supabase errors are plain objects — not `instanceof Error`. Always extract messages with:
@@ -137,8 +151,7 @@ All API routes must return `{ error: string }` on failure with an appropriate HT
 ## Forbidden Patterns
 
 - **Never** call `createClient()` outside of `useMemo` — causes infinite re-renders
-- **Never** send unresized images to `/api/generate-description` — exceeds Vercel's 4.5MB limit
-- **Never** use `btoa(String.fromCharCode(...new Uint8Array(buffer)))` spread — stack overflow on large files
+- **Never** upload raw camera files to storage or send base64 images to `/api/generate-description` — use `uploadPhoto` and pass storage URLs
 - **Never** insert a field that isn't in `supabase-schema.sql` — causes untraceable errors
 - **Never** skip validation on `condition`, `rarity`, or `originality` before inserting
 - **Never** prefix `ANTHROPIC_API_KEY` with `NEXT_PUBLIC_` — exposes the key in every browser session

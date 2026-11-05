@@ -1,10 +1,14 @@
 'use client';
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { ComposableMap, Geographies, Geography, Marker } from 'react-simple-maps';
 import { CULTURES, REGION_COLORS } from '@/lib/constants';
-import type { PotteryItem } from '@/lib/types';
+import { groupByCulture } from '@/lib/taxonomy';
+import { coverThumb } from '@/lib/photos';
+import { formatPeriod } from '@/lib/period';
+import type { PieceSummary } from '@/lib/types';
+import { PieceImage } from '@/components/ui/PieceImage';
 
 const GEO_URL = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json';
 const BASE_SCALE = 140;
@@ -12,8 +16,7 @@ const K = Math.PI / 180; // degrees → radians
 const DEG_PER_RAD = 180 / Math.PI; // radians → degrees
 
 interface Props {
-  items: PotteryItem[];
-  onEditPiece: (item: PotteryItem) => void;
+  items: PieceSummary[];
 }
 
 interface Tooltip {
@@ -32,15 +35,6 @@ interface CssTransform {
   ty: number;
 }
 
-function piecesForCulture(items: PotteryItem[], cultureName: string): PotteryItem[] {
-  const needle = cultureName.toLowerCase();
-  return items.filter((item) => {
-    if (!item.tribe_culture) return false;
-    const hay = item.tribe_culture.toLowerCase();
-    return hay.includes(needle) || needle.includes(hay);
-  });
-}
-
 // CSS transform that makes an SVG rendered at `snap` look like `work`
 function computeCss(snap: ViewState, work: ViewState, W: number, H: number): CssTransform {
   const scale = work.projScale / snap.projScale;
@@ -49,7 +43,8 @@ function computeCss(snap: ViewState, work: ViewState, W: number, H: number): Css
   return { scale, tx, ty };
 }
 
-export default function InventoryMap({ items, onEditPiece }: Props) {
+export default function InventoryMap({ items }: Props) {
+  const { groups, unclassified } = useMemo(() => groupByCulture(items), [items]);
   // What the SVG is actually rendered at — only updated when interaction settles
   const [rendered, setRendered] = useState<ViewState>({ projScale: BASE_SCALE, center: [10, 15] });
   // CSS transform layered on top for smooth live feedback
@@ -57,7 +52,7 @@ export default function InventoryMap({ items, onEditPiece }: Props) {
 
   const [dragging, setDragging] = useState(false);
   const [tooltip, setTooltip] = useState<Tooltip | null>(null);
-  const [drawer, setDrawer] = useState<{ culture: string; pieces: PotteryItem[] } | null>(null);
+  const [drawer, setDrawer] = useState<{ culture: string; pieces: PieceSummary[] } | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
   // Refs hold the authoritative live state without triggering renders
@@ -305,11 +300,11 @@ export default function InventoryMap({ items, onEditPiece }: Props) {
   }
 
   const handleMarkerClick = useCallback(
-    (cultureName: string) => {
+    (cultureId: string, cultureName: string) => {
       if (didDrag.current) return;
-      setDrawer({ culture: cultureName, pieces: piecesForCulture(items, cultureName) });
+      setDrawer({ culture: cultureName, pieces: groups.get(cultureId) ?? [] });
     },
-    [items],
+    [groups],
   );
 
   const cssStyle = css
@@ -366,16 +361,15 @@ export default function InventoryMap({ items, onEditPiece }: Props) {
               20,
               Math.max(5, 8 * Math.pow(rendered.projScale / BASE_SCALE, 0.4)),
             );
-            return CULTURES.map((c) => {
-              const pieces = piecesForCulture(items, c.culture);
-              const count = pieces.length;
+            return CULTURES.filter((c) => groups.has(c.id)).map((c) => {
+              const count = groups.get(c.id)?.length ?? 0;
               const color = REGION_COLORS[c.region];
               return (
-                <Marker key={c.culture} coordinates={[c.lng, c.lat]}>
+                <Marker key={c.id} coordinates={[c.lng, c.lat]}>
                   <circle
                     r={markerR}
                     fill={color}
-                    fillOpacity={count > 0 ? 1 : 0.2}
+                    fillOpacity={0.92}
                     stroke="white"
                     strokeWidth={1.5}
                     style={{ cursor: dragging ? 'grabbing' : 'pointer' }}
@@ -383,7 +377,7 @@ export default function InventoryMap({ items, onEditPiece }: Props) {
                       setTooltip({ culture: c.culture, count, x: e.clientX, y: e.clientY })
                     }
                     onMouseLeave={() => setTooltip(null)}
-                    onClick={() => handleMarkerClick(c.culture)}
+                    onClick={() => handleMarkerClick(c.id, c.culture)}
                   />
                   {count > 0 && (
                     <text
@@ -411,12 +405,14 @@ export default function InventoryMap({ items, onEditPiece }: Props) {
         onTouchStart={(e) => e.stopPropagation()}
       >
         <button
+          aria-label="Zoom in"
           onClick={() => zoomBy(1.5)}
           className="w-9 h-9 bg-white rounded-xl shadow-sm border border-[#e5e5e5] flex items-center justify-center text-[#333] hover:border-[#aaa] transition-colors text-lg font-light"
         >
           +
         </button>
         <button
+          aria-label="Zoom out"
           onClick={() => zoomBy(1 / 1.5)}
           className="w-9 h-9 bg-white rounded-xl shadow-sm border border-[#e5e5e5] flex items-center justify-center text-[#333] hover:border-[#aaa] transition-colors text-lg font-light"
         >
@@ -442,6 +438,11 @@ export default function InventoryMap({ items, onEditPiece }: Props) {
         className="absolute bottom-4 left-4 bg-white/95 backdrop-blur rounded-xl px-3.5 py-3 flex flex-col gap-2 shadow-sm border border-[#e5e5e5] z-10"
         onMouseDown={(e) => e.stopPropagation()}
       >
+        {unclassified.length > 0 && (
+          <p className="text-[11px] text-[#888] leading-none">
+            {unclassified.length} unclassified {unclassified.length === 1 ? 'piece' : 'pieces'}
+          </p>
+        )}
         {(Object.entries(REGION_COLORS) as [string, string][]).map(([region, color]) => (
           <div key={region} className="flex items-center gap-2.5">
             <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
@@ -467,6 +468,7 @@ export default function InventoryMap({ items, onEditPiece }: Props) {
                 </p>
               </div>
               <button
+                aria-label="Close"
                 onClick={() => setDrawer(null)}
                 className="w-8 h-8 flex items-center justify-center rounded-full bg-[#f5f5f5] text-[#666] hover:bg-[#ebebeb] transition-colors"
               >
@@ -493,40 +495,26 @@ export default function InventoryMap({ items, onEditPiece }: Props) {
                 {drawer.pieces.map((piece) => (
                   <Link
                     key={piece.id}
-                    href={`/item/${piece.id}`}
+                    href={`/item/${piece.sku}`}
                     onClick={() => setDrawer(null)}
                     className="flex items-center gap-3 bg-[#fafafa] border border-[#f0f0f0] rounded-xl p-3 hover:border-[#e0e0e0] hover:bg-white transition-colors"
                   >
                     <div className="w-11 h-11 rounded-lg bg-[#f0f0f0] overflow-hidden shrink-0">
-                      {piece.photos?.[0] ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={piece.photos[0]}
-                          alt={piece.name}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <svg
-                            width="14"
-                            height="14"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="#ccc"
-                            strokeWidth="1.5"
-                          >
-                            <rect x="3" y="3" width="18" height="18" rx="2" />
-                            <circle cx="8.5" cy="8.5" r="1.5" />
-                            <polyline points="21 15 16 10 5 21" />
-                          </svg>
-                        </div>
-                      )}
+                      <PieceImage
+                        src={coverThumb(piece)}
+                        fallbackSrc={piece.photos?.[0]}
+                        alt={piece.name}
+                        className="w-full h-full object-cover"
+                      />
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium text-[#111] truncate">{piece.name}</p>
                       <p className="text-[11px] text-[#bbb] font-mono mt-0.5">{piece.sku}</p>
-                      {piece.age && (
-                        <p className="text-[11px] text-[#999] truncate mt-0.5">{piece.age}</p>
+                      {(piece.period_start_year != null || piece.age) && (
+                        <p className="text-[11px] text-[#999] truncate mt-0.5">
+                          {formatPeriod(piece.period_start_year, piece.period_end_year) ||
+                            piece.age}
+                        </p>
                       )}
                     </div>
                     <svg

@@ -19,13 +19,35 @@ export function createSupabaseMock() {
     return next;
   }
 
+  const builders: Record<string, ReturnType<typeof vi.fn>>[] = [];
+
   function makeQueryBuilder() {
     const builder: Record<string, unknown> = {};
-    const chain = ['select', 'insert', 'update', 'delete', 'eq', 'order', 'ilike', 'not', 'is'];
+    const chain = [
+      'select',
+      'insert',
+      'update',
+      'upsert',
+      'delete',
+      'eq',
+      'neq',
+      'gte',
+      'lte',
+      'in',
+      'order',
+      'range',
+      'limit',
+      'textSearch',
+      'ilike',
+      'not',
+      'is',
+    ];
     for (const method of chain) {
       builder[method] = vi.fn(() => builder);
     }
     builder.single = vi.fn(() => Promise.resolve(nextResult()));
+    builder.maybeSingle = vi.fn(() => Promise.resolve(nextResult()));
+    builders.push(builder as Record<string, ReturnType<typeof vi.fn>>);
     builder.then = (
       onFulfilled?: ((value: QueueResult) => unknown) | null,
       onRejected?: ((reason: unknown) => unknown) | null,
@@ -35,6 +57,7 @@ export function createSupabaseMock() {
 
   const storageBucket = {
     upload: vi.fn(() => Promise.resolve(nextResult())),
+    remove: vi.fn(() => Promise.resolve(nextResult())),
     // Real getPublicUrl is synchronous — no await in calling code.
     getPublicUrl: vi.fn(() => nextResult()),
   };
@@ -59,6 +82,10 @@ export function createSupabaseMock() {
 
   return {
     supabase,
+    builders,
+    bucket: storageBucket,
+    lastBuilder: () => builders[builders.length - 1],
+    pending: () => queue.length,
     queueResult: <T>(result: Partial<QueueResult<T>>) => {
       queue.push({ data: null, error: null, ...result });
     },
@@ -69,6 +96,7 @@ export function createSupabaseMock() {
     // call in beforeEach for suites where component effects can outlive a test.
     reset: () => {
       queue.length = 0;
+      builders.length = 0;
       currentUser = null;
     },
   };

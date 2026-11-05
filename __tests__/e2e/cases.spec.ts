@@ -45,7 +45,7 @@ test('public user can browse cases and open a case with a mocked piece inside', 
   await page.goto('/cases');
   await expect(page.getByText('A — Left Tower')).toBeVisible();
 
-  await page.getByText('A — Left Tower').click();
+  await page.getByRole('link', { name: /A — Left Tower/ }).click();
   await expect(page).toHaveURL(/\/cases\/A/);
   await expect(page.getByText('E2E Test Vessel')).toBeVisible();
 });
@@ -68,6 +68,6 @@ test('public user can open the item detail page for a piece from the case', asyn
   });
 
   await page.goto(`/item/${FIXTURE_PIECE.id}`);
-  await expect(page.getByText('E2E Test Vessel')).toBeVisible();
-  await expect(page.getByText(FIXTURE_PIECE.sku)).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'E2E Test Vessel' })).toBeVisible();
+  await expect(page.getByText(FIXTURE_PIECE.sku).first()).toBeVisible();
 });

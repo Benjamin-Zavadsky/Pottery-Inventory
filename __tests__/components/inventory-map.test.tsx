@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '../support/render';
-import type { PotteryItem } from '@/lib/types';
 import type { ReactNode } from 'react';
 
 vi.mock('react-simple-maps', () => ({
@@ -26,40 +25,11 @@ vi.mock('react-simple-maps', () => ({
 }));
 
 import InventoryMap from '@/components/InventoryMap';
+import { makeSummary } from '../support/fixtures';
+import type { PieceSummary } from '@/lib/types';
 
-function makeItem(overrides: Partial<PotteryItem>): PotteryItem {
-  return {
-    id: 'id-1',
-    sku: 'P0001',
-    date_entered: '2026-01-01',
-    date_acquired: null,
-    location_acquired: null,
-    name: 'Test Vessel',
-    use_function: null,
-    place_of_origin: 'North America',
-    age: '800 CE',
-    dimensions: null,
-    tribe_culture: null,
-    appraised_value: null,
-    acquisition_cost: null,
-    color: 'Brown',
-    rarity: null,
-    museums_comparable: null,
-    location_in_case: null,
-    case_id: null,
-    condition: 'Good',
-    originality: null,
-    seller_donator: null,
-    provenance: null,
-    appraisal_date: null,
-    appraiser_name: null,
-    status: 'Active',
-    research_notes: null,
-    description: null,
-    photos: [],
-    created_at: '2026-01-01',
-    ...overrides,
-  };
+function makeItem(overrides: Partial<PieceSummary>): PieceSummary {
+  return makeSummary({ culture_id: null, ...overrides });
 }
 
 // Mississippian is at lat 33.5, lng -90.2 in lib/constants.ts
@@ -67,13 +37,13 @@ const MISSISSIPPIAN_MARKER = 'marker--90.2,33.5';
 
 describe('InventoryMap', () => {
   it('renders the region legend', () => {
-    render(<InventoryMap items={[]} onEditPiece={vi.fn()} />);
+    render(<InventoryMap items={[]} />);
     expect(screen.getByText('North America')).toBeInTheDocument();
     expect(screen.getByText('Mesoamerica')).toBeInTheDocument();
   });
 
   it('zooms in when the + control is clicked', () => {
-    const { container } = render(<InventoryMap items={[]} onEditPiece={vi.fn()} />);
+    const { container } = render(<InventoryMap items={[]} />);
     const before = Number(
       container.querySelector('[data-testid="composable-map"]')!.getAttribute('data-scale'),
     );
@@ -94,7 +64,7 @@ describe('InventoryMap', () => {
       }),
       makeItem({ id: 'b', name: 'Second Vessel', tribe_culture: 'Mississippian' }),
     ];
-    const { container } = render(<InventoryMap items={items} onEditPiece={vi.fn()} />);
+    const { container } = render(<InventoryMap items={items} />);
     const marker = container.querySelector(`[data-testid="${MISSISSIPPIAN_MARKER}"] circle`)!;
     fireEvent.click(marker);
     expect(screen.getByRole('heading', { name: 'Mississippian' })).toBeInTheDocument();
@@ -102,32 +72,47 @@ describe('InventoryMap', () => {
     expect(screen.getByText('2 pieces')).toBeInTheDocument();
   });
 
-  it('shows an empty drawer for a culture with no matching pieces', () => {
-    const { container } = render(<InventoryMap items={[]} onEditPiece={vi.fn()} />);
-    const marker = container.querySelector(`[data-testid="${MISSISSIPPIAN_MARKER}"] circle`)!;
-    fireEvent.click(marker);
-    expect(screen.getByText('No pieces catalogued')).toBeInTheDocument();
+  it('only draws markers for cultures that have pieces', () => {
+    const { container } = render(<InventoryMap items={[]} />);
+    expect(container.querySelector(`[data-testid="${MISSISSIPPIAN_MARKER}"]`)).toBeNull();
   });
 
-  it('ignores pieces with no tribe_culture set', () => {
-    const items = [makeItem({ id: 'a', tribe_culture: null })];
-    const { container } = render(<InventoryMap items={items} onEditPiece={vi.fn()} />);
-    const marker = container.querySelector(`[data-testid="${MISSISSIPPIAN_MARKER}"] circle`)!;
-    fireEvent.click(marker);
-    expect(screen.getByText('No pieces catalogued')).toBeInTheDocument();
+  it('counts unclassified pieces in the legend instead of a marker', () => {
+    const items = [
+      makeItem({ id: 'a', tribe_culture: null }),
+      makeItem({ id: 'b', tribe_culture: null }),
+    ];
+    const { container, rerender } = render(<InventoryMap items={items} />);
+    expect(screen.getByText('2 unclassified pieces')).toBeInTheDocument();
+    expect(container.querySelector(`[data-testid="${MISSISSIPPIAN_MARKER}"]`)).toBeNull();
+    rerender(<InventoryMap items={items.slice(0, 1)} />);
+    expect(screen.getByText('1 unclassified piece')).toBeInTheDocument();
+  });
+
+  it('links drawer pieces to their SKU page and shows the period', () => {
+    const items = [
+      makeItem({ id: 'a', sku: 'P0042', name: 'Dated', culture_id: 'mississippian', age: null }),
+    ];
+    const { container } = render(<InventoryMap items={items} />);
+    fireEvent.click(container.querySelector(`[data-testid="${MISSISSIPPIAN_MARKER}"] circle`)!);
+    expect(screen.getByRole('link', { name: /Dated/ })).toHaveAttribute('href', '/item/P0042');
+    expect(screen.getByText('1050–1200 CE')).toBeInTheDocument();
+    expect(screen.getByText('1 piece')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('link', { name: /Dated/ }));
+    expect(screen.queryByText('Dated')).not.toBeInTheDocument();
   });
 
   it('closes the drawer via its close button', () => {
     const items = [makeItem({ id: 'a', name: 'Shell Vessel', tribe_culture: 'Mississippian' })];
-    const { container } = render(<InventoryMap items={items} onEditPiece={vi.fn()} />);
+    const { container } = render(<InventoryMap items={items} />);
     fireEvent.click(container.querySelector(`[data-testid="${MISSISSIPPIAN_MARKER}"] circle`)!);
     expect(screen.getByText('Shell Vessel')).toBeInTheDocument();
-    fireEvent.click(screen.getAllByRole('button').find((b) => b.querySelector('line'))!);
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(screen.queryByText('Shell Vessel')).not.toBeInTheDocument();
   });
 
   it('zooms out when the − control is clicked', () => {
-    const { container } = render(<InventoryMap items={[]} onEditPiece={vi.fn()} />);
+    const { container } = render(<InventoryMap items={[]} />);
     const before = Number(
       container.querySelector('[data-testid="composable-map"]')!.getAttribute('data-scale'),
     );
@@ -143,7 +128,7 @@ describe('InventoryMap', () => {
       makeItem({ id: 'a', tribe_culture: 'Mississippian' }),
       makeItem({ id: 'b', tribe_culture: 'Mississippian' }),
     ];
-    const { container } = render(<InventoryMap items={items} onEditPiece={vi.fn()} />);
+    const { container } = render(<InventoryMap items={items} />);
     const marker = container.querySelector(`[data-testid="${MISSISSIPPIAN_MARKER}"] circle`)!;
     fireEvent.mouseEnter(marker, { clientX: 10, clientY: 10 });
     expect(screen.getByText('Mississippian')).toBeInTheDocument();
@@ -153,7 +138,7 @@ describe('InventoryMap', () => {
   });
 
   it('pans on mouse drag and updates the cursor while dragging', () => {
-    const { container } = render(<InventoryMap items={[]} onEditPiece={vi.fn()} />);
+    const { container } = render(<InventoryMap items={[]} />);
     const mapContainer = container.firstElementChild as HTMLElement;
     fireEvent.mouseDown(mapContainer, { clientX: 100, clientY: 100 });
     fireEvent.mouseMove(mapContainer, { clientX: 130, clientY: 130 });
@@ -163,7 +148,7 @@ describe('InventoryMap', () => {
   });
 
   it('zooms via the wheel event and commits after the interaction settles', async () => {
-    const { container } = render(<InventoryMap items={[]} onEditPiece={vi.fn()} />);
+    const { container } = render(<InventoryMap items={[]} />);
     const mapContainer = container.firstElementChild as HTMLElement;
     const before = Number(
       container.querySelector('[data-testid="composable-map"]')!.getAttribute('data-scale'),
@@ -183,7 +168,7 @@ describe('InventoryMap', () => {
   }
 
   it('pans on a single-finger touch drag', async () => {
-    const { container } = render(<InventoryMap items={[]} onEditPiece={vi.fn()} />);
+    const { container } = render(<InventoryMap items={[]} />);
     const mapContainer = container.firstElementChild as HTMLElement;
     const before = Number(
       container.querySelector('[data-testid="composable-map"]')!.getAttribute('data-scale'),
@@ -201,7 +186,7 @@ describe('InventoryMap', () => {
   });
 
   it('zooms on a two-finger pinch touch gesture', async () => {
-    const { container } = render(<InventoryMap items={[]} onEditPiece={vi.fn()} />);
+    const { container } = render(<InventoryMap items={[]} />);
     const mapContainer = container.firstElementChild as HTMLElement;
     const before = Number(
       container.querySelector('[data-testid="composable-map"]')!.getAttribute('data-scale'),
