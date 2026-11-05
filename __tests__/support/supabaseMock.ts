@@ -44,6 +44,14 @@ export function createSupabaseMock() {
     storage: { from: vi.fn(() => storageBucket) },
     auth: {
       getUser: vi.fn(() => Promise.resolve({ data: { user: currentUser }, error: null })),
+      getSession: vi.fn(() =>
+        Promise.resolve({
+          data: {
+            session: currentUser ? { access_token: 'test-access-token', user: currentUser } : null,
+          },
+          error: null,
+        }),
+      ),
       signInWithPassword: vi.fn(() => Promise.resolve(nextResult())),
       signOut: vi.fn(() => Promise.resolve({ error: null })),
     },

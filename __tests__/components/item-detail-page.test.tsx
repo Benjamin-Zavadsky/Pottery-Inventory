@@ -80,6 +80,13 @@ describe('ItemPage', () => {
     expect(screen.queryByText('Edit')).not.toBeInTheDocument();
   });
 
+  it('does not show Analyze with AI for anonymous visitors, even with photos', async () => {
+    supabaseMock.queueResult({ data: { ...baseItem, photos: ['https://example.com/p.jpg'] } });
+    render(<ItemPage />);
+    await screen.findByText('Existing Vessel');
+    expect(screen.queryByText('Analyze with AI')).not.toBeInTheDocument();
+  });
+
   it('lets a staff member switch into edit mode', async () => {
     supabaseMock.setUser({ id: 'staff-1' });
     supabaseMock.queueResult({ data: baseItem });

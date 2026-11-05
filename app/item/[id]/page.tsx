@@ -225,9 +225,15 @@ export default function ItemPage() {
         return;
       }
       const body = JSON.stringify({ images, userContext: userContext.trim() || undefined });
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       const apiRes = await fetch('/api/generate-description', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session?.access_token}`,
+        },
         body,
       });
       const text = await apiRes.text();
@@ -505,8 +511,8 @@ export default function ItemPage() {
               </div>
             )}
 
-            {/* AI analyze / re-analyze section */}
-            {(item.photos ?? []).length > 0 && (
+            {/* AI analyze / re-analyze section — staff only */}
+            {user && (item.photos ?? []).length > 0 && (
               <div className="px-4 sm:px-0 pb-2 lg:pb-0 flex flex-col gap-2">
                 {editing && (
                   <textarea

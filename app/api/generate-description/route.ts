@@ -1,8 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
+import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { CONDITIONS, RARITIES, ORIGINALITIES } from '@/lib/constants';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+async function isAuthenticated(request: NextRequest): Promise<boolean> {
+  const authHeader = request.headers.get('authorization');
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice('Bearer '.length) : null;
+  if (!token) return false;
+
+  const supabase = createSupabaseClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  );
+  const { data } = await supabase.auth.getUser(token);
+  return data.user !== null;
+}
 
 type ImageInput = {
   imageBase64: string;
@@ -172,6 +186,10 @@ Return ONLY a single valid JSON object — no explanation, no markdown, no text 
 
 export async function POST(request: NextRequest) {
   try {
+    if (!(await isAuthenticated(request))) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const body = await request.json();
 
     // Support both single image (legacy) and multiple images
